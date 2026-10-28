@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIREGUARD · Actividad de incendios en Paraguay</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🔥 FIREGUARD</h1>
+    <p class="tag">Calendario armonizado de actividad de incendios · Paraguay</p>
+  </header>
+
+  <nav id="tabs">
+    <button data-tab="mapa" class="active">Mapa</button>
+    <button data-tab="calendario">Calendario</button>
+    <button data-tab="reportar">Reportar</button>
+    <button data-tab="bomberos">Bomberos</button>
+    <button data-tab="acerca">Acerca de</button>
+  </nav>
+
+  <main>
+    <!-- MAPA -->
+    <section id="mapa" class="panel active">
+      <div class="controls">
+        <label>Período
+          <select id="days">
+            <option value="1">Último día</option>
+            <option value="2" selected>2 días</option>
+            <option value="3">3 días</option>
+            <option value="5">5 días</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="fMODIS" checked> <span class="dot modis"></span> MODIS</label>
+        <label><input type="checkbox" id="fVIIRS" checked> <span class="dot viirs"></span> VIIRS</label>
+        <label><input type="checkbox" id="fHigh"> Solo confianza alta</label>
+        <label><input type="checkbox" id="fReports" checked> <span class="dot rep"></span> Reportes ciudadanos</label>
+        <button id="btnReload">Actualizar</button>
+        <button id="btnPY">Ver Paraguay</button>
+        <button id="btnLoc">Mi ubicación</button>
+      </div>
+      <div id="mapStatus" class="status">Cargando…</div>
+      <div id="map"></div>
+      <p class="note">Cada punto es una <b>detección térmica satelital</b>, no un incendio confirmado: puede ser quema agrícola controlada, industria, o una falsa alarma. Los satélites pasan a ciertas horas, no vigilan de forma continua.</p>
+    </section>
+
+    <!-- CALENDARIO -->
+    <section id="calendario" class="panel">
+      <div class="controls">
+        <label>Ventana
+          <select id="calDays">
+            <option value="7">7 días</option>
+            <option value="10" selected>10 días</option>
+          </select>
+        </label>
+        <button id="btnCal">Actualizar</button>
+      </div>
+      <div id="calStatus" class="status">Abrí esta pestaña para cargar el análisis…</div>
+      <div id="calGrid" class="calgrid"></div>
+      <div class="legend">
+        <span><span class="bar modis"></span> MODIS (detecciones)</span>
+        <span><span class="bar viirs"></span> VIIRS (detecciones)</span>
+        <span><span class="bar uni"></span> Zonas únicas armonizadas</span>
+      </div>
+      <h3>Zonas con más actividad en la ventana</h3>
+      <div id="zones"></div>
+      <details>
+        <summary>¿Cómo se armonizan los datos?</summary>
+        <div id="method"></div>
+      </details>
+      <h3>Detalle por día</h3>
+      <div class="tablewrap"><table id="calTable"></table></div>
+    </section>
+
+    <!-- REPORTAR -->
+    <section id="reportar" class="panel">
+      <p class="warn">⚠️ Esta web <b>no reemplaza</b> a los bomberos ni a los servicios de emergencia. Si hay peligro inmediato, llamá al <b>911</b> o a los <b>Bomberos (132)</b>.</p>
+      <div id="pickmap"></div>
+      <p class="note">Tocá el mapa para marcar dónde viste humo o fuego, o usá tu ubicación.</p>
+      <form id="repForm">
+        <button type="button" id="btnPickLoc">Usar mi ubicación</button>
+        <div id="pickCoords" class="status">Ubicación: sin seleccionar</div>
+        <label>¿Qué viste? (mín. 10 caracteres)
+          <textarea id="repDesc" maxlength="500" required></textarea>
+        </label>
+        <label>Tu nombre (opcional)<input id="repName" maxlength="80"></label>
+        <label>Teléfono o contacto (opcional, solo lo ven los bomberos)<input id="repContact" maxlength="80"></label>
+        <button type="submit">Enviar reporte</button>
+        <div id="repMsg" class="status"></div>
+      </form>
+    </section>
+
+    <!-- BOMBEROS -->
+    <section id="bomberos" class="panel">
+      <div id="loginBox">
+        <label>Token de acceso
+          <input type="password" id="tokenInput" autocomplete="off">
+        </label>
+        <button id="btnLogin">Entrar</button>
+        <div id="loginMsg" class="status"></div>
+      </div>
+      <div id="adminBox" hidden>
+        <div class="controls">
+          <button id="btnAdminReload">Actualizar</button>
+          <button id="btnLogout">Salir</button>
+        </div>
+        <h3>Alertas: reporte + detección satelital cercana</h3>
+        <p class="note">Son pistas para priorizar (≤5 km, últimos 3 días). Un foco satelital no confirma un incendio.</p>
+        <div id="alerts"></div>
+        <h3>Reportes</h3>
+        <div id="adminReports"></div>
+      </div>
+    </section>
+
+    <!-- ACERCA -->
+    <section id="acerca" class="panel">
+      <h3>Problema</h3>
+      <p>MODIS y VIIRS son dos sensores satelitales de la NASA que detectan puntos de calor con resoluciones, horarios y escalas de confianza distintas. Mirarlos por separado dificulta ver cuándo realmente sube la actividad de incendios.</p>
+      <h3>Solución</h3>
+      <p>FIREGUARD los unifica en un calendario diario (sin contar dos veces la misma zona), compara cada día con los mismos días de años anteriores para marcar anomalías, y permite que la ciudadanía reporte humo o fuego para que los bomberos lo prioricen.</p>
+      <h3>¿Para qué sirve?</h3>
+      <p>Para tener una vista rápida de dónde y cuándo se concentra la actividad, y como apoyo a la decisión de equipos de emergencia. No confirma incendios ni reemplaza a los bomberos.</p>
+      <h3>Fuentes y créditos</h3>
+      <p>Datos: NASA FIRMS (MODIS y VIIRS), con recursos abiertos de NASA. Mapas: © OpenStreetMap contributors y Esri. FIREGUARD es un proyecto independiente: <b>NASA no lo creó ni lo respalda</b>.</p>
+      <h3>Uso de IA</h3>
+      <p>Este proyecto se desarrolló con asistencia de IA (Claude, de Anthropic) para escribir el código. Los datos son reales y provienen de NASA FIRMS; no se inventan ni se simulan.</p>
+    </section>
+  </main>
+
+  <footer>FIREGUARD · Datos NASA FIRMS · Detección satelital ≠ incendio confirmado · No reemplaza a los bomberos · Hecho con asistencia de IA</footer>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
