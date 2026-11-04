@@ -400,11 +400,24 @@ app.post('/api/reports', dbwrap(async (req, res) => {
 }));
 
 // Panel de bomberos (requiere token)
+// Como el token puede ser corto, se limitan los intentos fallidos: 10 cada 15 minutos por conexión.
+const authFails = new Map();
+const MAX_FAILS = 10, FAIL_WINDOW = 15 * 60e3;
+function recentFails(ip) {
+  const now = Date.now();
+  const arr = (authFails.get(ip) || []).filter((t) => now - t < FAIL_WINDOW);
+  authFails.set(ip, arr);
+  return arr;
+}
 function admin(req, res, next) {
   if (!ADMIN_TOKEN) return res.status(503).json({ error: 'Panel deshabilitado: falta FIREFIGHTER_TOKEN en el servidor.' });
+  if (recentFails(req.ip).length >= MAX_FAILS) {
+    return res.status(429).json({ error: 'Demasiados intentos fallidos. Esperá 15 minutos e intentá de nuevo.' });
+  }
   const a = Buffer.from(String(req.get('x-admin-token') || ''));
   const b = Buffer.from(ADMIN_TOKEN);
-  if (a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) { authFails.delete(req.ip); return next(); }
+  authFails.get(req.ip).push(Date.now());
   res.status(401).json({ error: 'Token incorrecto.' });
 }
 
