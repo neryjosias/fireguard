@@ -67,6 +67,38 @@ legend.onAdd = () => el('div', { class: 'map-legend' },
   el('div', {}, 'Más grande = más potencia'));
 legend.addTo(map);
 
+// ---------- Resumen del área de un foco (se pide al abrirlo) ----------
+async function loadEnv(box, lat, lon, popup) {
+  if (box.dataset.state === 'loading' || box.dataset.state === 'done') return;
+  box.dataset.state = 'loading';
+  box.replaceChildren(el('p', { class: 'status loading' }, 'Analizando el área con datos de NASA, Copernicus y ECMWF. Puede tardar hasta un minuto.'));
+  popup.update();
+  try {
+    const d = await api(`/api/focus?lat=${lat}&lon=${lon}`);
+    renderEnv(box, d.summary);
+    box.dataset.state = 'done';
+  } catch (e) {
+    box.dataset.state = 'error';
+    box.replaceChildren(
+      el('p', { class: 'status err' }, 'Resumen del área no disponible. ' + e.message),
+      el('button', { class: 'btn', type: 'button', onclick: () => { box.dataset.state = ''; loadEnv(box, lat, lon, popup); } }, 'Reintentar'));
+  }
+  popup.update();
+}
+function renderEnv(box, s) {
+  const lvl = s.level ? 'lvl-' + s.level.replace(' ', '-') : 'lvl-nd';
+  box.replaceChildren(
+    el('div', { class: 'lvl ' + lvl }, s.level ? `Potencial de propagación ${s.level}, ${s.score} de 100` : 'Potencial de propagación sin datos suficientes'),
+    el('p', { class: 'concl' }, s.conclusion),
+    el('dl', { class: 'items' }, s.items.flatMap((i) => [el('dt', {}, i.label), el('dd', {}, i.text)])),
+    el('details', { class: 'src' }, el('summary', {}, 'Datos por fuente'),
+      ...s.rows.map((r) => el('div', { class: 'src-row' },
+        el('b', {}, r.label), el('span', {}, r.value),
+        r.date ? el('small', {}, 'Fecha: ' + r.date) : null,
+        el('small', {}, 'Fuente: ' + r.source)))),
+    el('p', { class: 'fine' }, s.notes.join(' ')));
+}
+
 async function loadFires() {
   setStatus($('#mapStatus'), 'Consultando NASA FIRMS…', 'loading');
   try {
@@ -90,13 +122,16 @@ function drawFires() {
     const mk = sensor === 'MODIS'
       ? L.circleMarker([lat, lon], { radius: r + 1.5, color: COLOR.modis, weight: 2, fillColor: COLOR.modis, fillOpacity: 0.1 })
       : L.circleMarker([lat, lon], { radius: r, color: COLOR.viirs, weight: 1, fillColor: COLOR.viirs, fillOpacity: 0.6 });
-    mk.bindPopup(el('div', {},
+    const env = el('div', { class: 'env' });
+    mk.bindPopup(el('div', { class: 'focus' },
       el('b', {}, `Detección térmica ${sensor}`), el('br'),
       `Satélite: ${sat}`, el('br'),
       `Fecha: ${date} ${time.slice(0, 2)}:${time.slice(2)} UTC`, el('br'),
       `Confianza: ${CONF[conf]}`, el('br'),
       `Potencia radiativa: ${frp} MW`, el('br'),
-      el('small', {}, 'Un foco satelital no confirma un incendio.')));
+      el('small', {}, 'Un foco satelital no confirma un incendio.'),
+      env), { maxWidth: 380, minWidth: 290, maxHeight: 460 });
+    mk.on('popupopen', (ev) => loadEnv(env, lat, lon, ev.popup));
     mk.addTo(fireLayer);
   }
   setStatus($('#mapStatus'), `${$('#mapStatus').dataset.base || ''} ${shown} de ${fires.length} detecciones visibles.`);

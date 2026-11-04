@@ -139,6 +139,25 @@ fieldset.seg legend { position: absolute; width: 1px; height: 1px; overflow: hid
 .leaflet-container { font-family: var(--text); }
 .leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: 0 6px 24px rgba(17, 34, 29, 0.22); }
 .leaflet-popup-content { margin: 12px 14px; font-size: 0.9rem; line-height: 1.5; color: var(--ink); }
+/* Resumen del área dentro del popup de un foco */
+.focus { font-size: 0.9rem; }
+.env { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.env .status { margin: 0 0 8px; }
+.lvl { display: inline-block; border-radius: 8px; padding: 6px 10px; font-weight: 700; font-size: 0.9rem; }
+.lvl-bajo { background: #d9f2e6; color: #0b5a3a; }
+.lvl-moderado { background: #fff1cc; color: #6b4500; }
+.lvl-alto { background: #ffe0cc; color: #7a2900; }
+.lvl-muy-alto { background: var(--viirs); color: #fff; }
+.lvl-nd { background: #e6e9e8; color: #44534e; }
+.env .concl { margin: 8px 0 6px; line-height: 1.45; }
+.env dl.items { margin: 0; }
+.env dt { font-weight: 600; margin-top: 7px; }
+.env dd { margin: 0; color: var(--ink-2); line-height: 1.4; }
+.env details.src { margin: 10px 0 0; padding: 8px 10px; }
+.env .src-row { display: grid; gap: 1px; padding: 6px 0; border-top: 1px solid var(--line-2); }
+.env .src-row:first-of-type { border-top: 0; }
+.env .src-row small { color: var(--ink-2); word-break: break-all; }
+.env .fine { color: var(--ink-2); font-size: 0.78rem; margin: 10px 0 0; line-height: 1.4; }
 .map-legend { background: rgba(255, 255, 255, 0.94); border: 1px solid var(--line); border-radius: 8px; padding: 8px 11px; font-size: 0.8rem; line-height: 1.7; color: var(--ink); }
 .map-legend div { display: flex; align-items: center; gap: 7px; }
 

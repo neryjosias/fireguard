@@ -196,6 +196,17 @@
           <li>Mapas: © OpenStreetMap contributors e imágenes de Esri.</li>
           <li>Mapa interactivo: Leaflet.</li>
         </ul>
+        <h3>Resumen del área de cada foco</h3>
+        <p>Al abrir un foco en el mapa, FIREGUARD consulta datos ambientales del lugar y los resume en lenguaje simple. Los datos se leen a través de Google Earth Engine:</p>
+        <ul>
+          <li>Humedad superficial y de raíces del suelo: NASA SMAP L4 (SPL4SMGP).</li>
+          <li>Precipitación: NASA GPM IMERG V07 y CHIRPS diario (UCSB Climate Hazards Center).</li>
+          <li>Tipo de suelo (arcilla y limo): ISRIC SoilGrids.</li>
+          <li>Viento, temperatura y humedad del aire: ECMWF ERA5-Land (Copernicus Climate Change Service).</li>
+          <li>Elevación y pendiente: USGS SRTM.</li>
+          <li>Vegetación y degradación del suelo: Copernicus Sentinel-2. Cambios en la superficie: Copernicus Sentinel-1 (radar). Cobertura del terreno: ESA WorldCover.</li>
+        </ul>
+        <p>Contiene datos modificados de Copernicus Sentinel. Cada dato muestra su fecha y su fuente en la sección "Datos por fuente" del foco. El "potencial de propagación" es una estimación orientativa con reglas simples del proyecto, no un modelo validado de comportamiento del fuego, y no confirma que haya un incendio. Sentinel-1 no mide deformación del terreno: se usa para ver cambios en la superficie.</p>
         <p>FIREGUARD es un proyecto independiente. NASA no lo creó ni lo respalda.</p>
         <h3>Uso de IA</h3>
         <p>El código de este proyecto se escribió con asistencia de IA (Claude, de Anthropic). Los datos que se muestran son reales y vienen de NASA FIRMS. No se inventan ni se simulan.</p>
