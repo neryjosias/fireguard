@@ -29,13 +29,15 @@ La configuración vive en el archivo `.env` (no se sube a ningún repositorio):
 |---|---|
 | `FIRMS_MAP_KEY` | Clave (MAP_KEY) de NASA FIRMS. **Solo la usa el servidor**; el navegador nunca la ve. |
 | `FIREFIGHTER_TOKEN` | Token para entrar a la pestaña "Bomberos". |
+| `DATABASE_URL` | Cadena de conexión de PostgreSQL donde se guardan los reportes. Si falta, se usa un archivo local (solo pruebas). |
 | `PORT` | Puerto (por defecto 3000). |
 
 ## Estructura
 ```
 server.js        API: proxy a FIRMS, armonización, anomalías, reportes, panel
 public/          index.html, style.css, app.js (Leaflet)
-data/            reportes guardados (reports.json, se crea solo)
+tests/           pruebas automáticas con Playwright (e2e.spec.js)
+data/            solo si no hay DATABASE_URL: reports.json de respaldo local
 ```
 
 ## Publicarlo (Render, Railway, Fly.io, etc.)
@@ -43,13 +45,31 @@ data/            reportes guardados (reports.json, se crea solo)
 2. Creá un servicio web Node: build `npm install`, start `npm start`.
 3. Cargá `FIRMS_MAP_KEY` y `FIREFIGHTER_TOKEN` como variables de entorno del servicio.
 4. Probá en la URL pública: `/api/health` debe mostrar `firmsKeyConfigured: true`, y el mapa debe cargar detecciones.
-5. Importante: muchos servicios gratuitos borran el disco al reiniciar. Para uso real, guardá los reportes en una base de datos (Postgres/Supabase) o montá un disco persistente en `DATA_DIR`.
+5. Creá una base PostgreSQL (Render, Neon o Supabase) y cargá su cadena como `DATABASE_URL`. La tabla `reports` se crea sola al arrancar. `/api/health` debe mostrar `storage: "postgres"`.
 
 ## Pruebas de las funciones principales
 - `GET /api/health` → servidor y claves configuradas.
 - `GET /api/fires?days=2` → detecciones reales (MODIS + VIIRS).
 - `GET /api/analysis?days=10` → calendario armonizado con anomalías.
 - Enviar un reporte desde la pestaña "Reportar" y gestionarlo desde "Bomberos".
+
+## Pruebas automáticas (Playwright)
+Las pruebas abren la web en un navegador real y comprueban las funciones principales: carga y aviso de emergencia, mapa con datos de NASA, calendario con sus gráficos, envío de un reporte, panel de Bomberos, que la clave de NASA no se filtre al navegador y que un texto con inyección SQL se guarde como texto.
+
+```bash
+npm install
+npm run test:e2e:install     # una sola vez: descarga el navegador de pruebas
+npm run test:e2e             # prueba el servidor local (lo arranca solo)
+
+# Probar la web publicada (Windows PowerShell):
+$env:BASE_URL="https://tu-app.onrender.com"; $env:FIREFIGHTER_TOKEN="tu_token"; npm run test:e2e
+```
+Los reportes de prueba empiezan con `[PRUEBA]` y se descartan solos al terminar. El servidor limita a 5 reportes por hora por conexión, así que no repitas la prueba muchas veces seguidas. Si falla algo, `npx playwright show-report` abre un informe con capturas.
+
+## Seguridad de la base de datos
+- Todas las consultas SQL usan **parámetros** (`$1`, `$2`…): los datos del usuario nunca se pegan dentro del texto SQL, por lo que no hay inyección SQL.
+- Además se validan tipo, rango y largo de cada campo, y los estados permitidos también están limitados en la tabla (`CHECK`).
+- Los errores de la base se registran en el servidor y al usuario solo le llega un mensaje genérico.
 
 ## Límites conocidos
 - FIRMS da detecciones de pasadas satelitales recientes, no seguimiento continuo.
