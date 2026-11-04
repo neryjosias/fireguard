@@ -7,6 +7,7 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import pg from 'pg';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,7 @@ const ADMIN_TOKEN = process.env.FIREFIGHTER_TOKEN;
 const PORT = Number(process.env.PORT) || 3000;
 const FIRMS_BASE = process.env.FIRMS_BASE || 'https://firms.modaps.eosdis.nasa.gov';
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
+const DATABASE_URL = process.env.DATABASE_URL; // PostgreSQL (Render, Neon, Supabase...). Sin esto se usa un archivo JSON local.
 
 // Caja que rodea a Paraguay: oeste,sur,este,norte
 const BBOX = { w: -62.7, s: -27.7, e: -54.2, n: -19.2 };
@@ -194,15 +196,91 @@ function topZones(points, n = 5) {
 }
 
 // ---------- Reportes ciudadanos ----------
-fs.mkdirSync(DATA_DIR, { recursive: true });
-const REPORTS_FILE = path.join(DATA_DIR, 'reports.json');
-let reports = [];
-try { reports = JSON.parse(fs.readFileSync(REPORTS_FILE, 'utf8')); } catch { reports = []; }
-function saveReports() {
-  const tmp = REPORTS_FILE + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(reports, null, 2));
-  fs.renameSync(tmp, REPORTS_FILE);
+// Almacenamiento: PostgreSQL si hay DATABASE_URL; si no, archivo JSON (solo para pruebas locales).
+// SEGURIDAD SQL: TODAS las consultas usan parámetros ($1, $2...). Ningún dato del usuario se concatena
+// dentro del texto SQL, así que no hay inyección SQL posible. Además se validan longitud y tipo antes.
+const rowToReport = (r) => ({
+  id: r.id, lat: r.lat, lon: r.lon, description: r.description, name: r.name, contact: r.contact,
+  status: r.status, createdAt: new Date(r.created_at).toISOString(), history: r.history,
+});
+
+async function createStore() {
+  if (DATABASE_URL) {
+    const local = /@(localhost|127\.0\.0\.1)/.test(DATABASE_URL);
+    const pool = new pg.Pool({
+      connectionString: DATABASE_URL,
+      ssl: local || process.env.DATABASE_SSL === 'false' ? false : { rejectUnauthorized: false },
+      max: 5,
+    });
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS reports (
+        id          TEXT PRIMARY KEY,
+        lat         DOUBLE PRECISION NOT NULL,
+        lon         DOUBLE PRECISION NOT NULL,
+        description TEXT NOT NULL,
+        name        TEXT NOT NULL DEFAULT '',
+        contact     TEXT NOT NULL DEFAULT '',
+        status      TEXT NOT NULL DEFAULT 'pendiente'
+                    CHECK (status IN ('pendiente','verificado','atendido','descartado')),
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        history     JSONB NOT NULL DEFAULT '[]'::jsonb
+      )`);
+    await pool.query('CREATE INDEX IF NOT EXISTS reports_status_idx ON reports (status)');
+    console.log('[DB] Reportes guardados en PostgreSQL.');
+    return {
+      kind: 'postgres',
+      async listPublic() {
+        const { rows } = await pool.query(
+          `SELECT * FROM reports WHERE status <> $1 ORDER BY created_at DESC LIMIT 1000`, ['descartado']);
+        return rows.map(rowToReport);
+      },
+      async listAll() {
+        const { rows } = await pool.query('SELECT * FROM reports ORDER BY created_at DESC LIMIT 5000');
+        return rows.map(rowToReport);
+      },
+      async listOpen() {
+        const { rows } = await pool.query(
+          'SELECT * FROM reports WHERE status = ANY($1::text[]) ORDER BY created_at DESC LIMIT 1000',
+          [['pendiente', 'verificado']]);
+        return rows.map(rowToReport);
+      },
+      async add(r) {
+        await pool.query(
+          `INSERT INTO reports (id, lat, lon, description, name, contact, status, created_at, history)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
+          [r.id, r.lat, r.lon, r.description, r.name, r.contact, r.status, r.createdAt, JSON.stringify(r.history)]);
+      },
+      async setStatus(id, status, entry) {
+        const { rows } = await pool.query(
+          `UPDATE reports SET status = $2, history = history || $3::jsonb WHERE id = $1 RETURNING *`,
+          [id, status, JSON.stringify([entry])]);
+        return rows[0] ? rowToReport(rows[0]) : null;
+      },
+    };
+  }
+
+  // Respaldo: archivo JSON
+  console.warn('[AVISO] Falta DATABASE_URL: los reportes se guardan en un archivo local (se pierden en Render gratis).');
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const file = path.join(DATA_DIR, 'reports.json');
+  let list = [];
+  try { list = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { list = []; }
+  const save = () => { fs.writeFileSync(file + '.tmp', JSON.stringify(list, null, 2)); fs.renameSync(file + '.tmp', file); };
+  return {
+    kind: 'file',
+    async listPublic() { return list.filter((r) => r.status !== 'descartado').reverse(); },
+    async listAll() { return [...list].reverse(); },
+    async listOpen() { return list.filter((r) => r.status === 'pendiente' || r.status === 'verificado'); },
+    async add(r) { list.push(r); save(); },
+    async setStatus(id, status, entry) {
+      const r = list.find((x) => x.id === id);
+      if (!r) return null;
+      r.status = status; r.history.push(entry); save();
+      return r;
+    },
+  };
 }
+const store = await createStore();
 const STATUSES = ['pendiente', 'verificado', 'atendido', 'descartado'];
 const clean = (s, max) => String(s ?? '').replace(/[\u0000-\u001f<>]/g, ' ').trim().slice(0, max);
 
@@ -284,14 +362,21 @@ app.get('/api/analysis', wrap(async (req, res) => {
   });
 }));
 
-// Reportes: lista pública (sin datos de contacto)
-app.get('/api/reports', (req, res) => {
-  res.json(reports.filter((r) => r.status !== 'descartado').map((r) => ({
-    id: r.id, lat: r.lat, lon: r.lon, createdAt: r.createdAt, status: r.status, description: r.description,
-  })));
+// Errores de base de datos: se registran en el servidor, pero al usuario solo le llega un mensaje genérico.
+const dbwrap = (fn) => (req, res) => fn(req, res).catch((e) => {
+  console.error('[DB]', e.message);
+  res.status(500).json({ error: 'Error interno al acceder a los reportes. Intentá de nuevo.' });
 });
 
-app.post('/api/reports', (req, res) => {
+// Reportes: lista pública (sin datos de contacto)
+app.get('/api/reports', dbwrap(async (req, res) => {
+  const list = await store.listPublic();
+  res.json(list.map((r) => ({
+    id: r.id, lat: r.lat, lon: r.lon, createdAt: r.createdAt, status: r.status, description: r.description,
+  })));
+}));
+
+app.post('/api/reports', dbwrap(async (req, res) => {
   if (rateLimited(req.ip)) return res.status(429).json({ error: 'Demasiados reportes desde tu conexión. Intentá más tarde.' });
   const lat = Number(req.body.lat), lon = Number(req.body.lon);
   if (!(lat >= BBOX.s && lat <= BBOX.n && lon >= BBOX.w && lon <= BBOX.e)) {
@@ -310,10 +395,9 @@ app.post('/api/reports', (req, res) => {
     createdAt: new Date().toISOString(),
     history: [{ at: new Date().toISOString(), status: 'pendiente', note: 'Reporte recibido' }],
   };
-  reports.push(report);
-  saveReports();
+  await store.add(report);
   res.status(201).json({ id: report.id, status: report.status });
-});
+}));
 
 // Panel de bomberos (requiere token)
 function admin(req, res, next) {
@@ -324,25 +408,25 @@ function admin(req, res, next) {
   res.status(401).json({ error: 'Token incorrecto.' });
 }
 
-app.get('/api/admin/reports', admin, (req, res) => res.json([...reports].reverse()));
+app.get('/api/admin/reports', admin, dbwrap(async (req, res) => res.json(await store.listAll())));
 
-app.patch('/api/admin/reports/:id', admin, (req, res) => {
-  const r = reports.find((x) => x.id === req.params.id);
-  if (!r) return res.status(404).json({ error: 'Reporte no encontrado.' });
+app.patch('/api/admin/reports/:id', admin, dbwrap(async (req, res) => {
+  const id = String(req.params.id);
+  if (!/^[0-9a-f]{8}$/.test(id)) return res.status(404).json({ error: 'Reporte no encontrado.' });
   const status = String(req.body.status || '');
   if (!STATUSES.includes(status)) return res.status(400).json({ error: 'Estado inválido.' });
-  r.status = status;
-  r.history.push({ at: new Date().toISOString(), status, note: clean(req.body.note, 300) });
-  saveReports();
+  const entry = { at: new Date().toISOString(), status, note: clean(req.body.note, 300) };
+  const r = await store.setStatus(id, status, entry);
+  if (!r) return res.status(404).json({ error: 'Reporte no encontrado.' });
   res.json(r);
-});
+}));
 
 // Alertas: reportes abiertos con una detección satelital cerca (≤5 km, últimos 3 días).
 // Es una pista para priorizar, NO una confirmación de incendio.
 app.get('/api/admin/alerts', admin, wrap(async (req, res) => {
   const { points } = await getCurrent(3);
   const alerts = [];
-  for (const r of reports.filter((x) => x.status === 'pendiente' || x.status === 'verificado')) {
+  for (const r of await store.listOpen()) {
     let best = null;
     for (const p of points) {
       if (Math.abs(p.lat - r.lat) > 0.06 || Math.abs(p.lon - r.lon) > 0.06) continue;
@@ -354,6 +438,6 @@ app.get('/api/admin/alerts', admin, wrap(async (req, res) => {
   res.json(alerts);
 }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, firmsKeyConfigured: !!MAP_KEY, adminConfigured: !!ADMIN_TOKEN }));
+app.get('/api/health', (req, res) => res.json({ ok: true, firmsKeyConfigured: !!MAP_KEY, adminConfigured: !!ADMIN_TOKEN, storage: store.kind }));
 
 app.listen(PORT, () => console.log(`FIREGUARD escuchando en http://localhost:${PORT}`));
