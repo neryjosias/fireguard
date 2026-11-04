@@ -7,14 +7,16 @@
   "scripts": {
     "start": "node server.js",
     "test:e2e": "playwright test",
-    "test:e2e:install": "playwright install chromium"
+    "test:e2e:install": "playwright install chromium",
+    "test": "node --test unit/analysis.test.js"
   },
   "engines": {
     "node": ">=18"
   },
   "dependencies": {
     "express": "^4.19.2",
-    "pg": "^8.11.3"
+    "pg": "^8.11.3",
+    "@google/earthengine": "^1.4.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0"

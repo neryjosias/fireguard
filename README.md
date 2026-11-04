@@ -29,12 +29,16 @@ La configuración vive en el archivo `.env` (no se sube a ningún repositorio):
 |---|---|
 | `FIRMS_MAP_KEY` | Clave (MAP_KEY) de NASA FIRMS. **Solo la usa el servidor**; el navegador nunca la ve. |
 | `FIREFIGHTER_TOKEN` | Token para entrar a la pestaña "Bomberos". |
+| `GEE_PROJECT` y `GEE_SERVICE_ACCOUNT_JSON` | Conexión a Google Earth Engine para el resumen de cada foco (opcional). |
 | `DATABASE_URL` | Cadena de conexión de PostgreSQL donde se guardan los reportes. Si falta, se usa un archivo local (solo pruebas). |
 | `PORT` | Puerto (por defecto 3000). |
 
 ## Estructura
 ```
 server.js        API: proxy a FIRMS, armonización, anomalías, reportes, panel
+earth.js         lectura de datos de Google Earth Engine (por foco)
+analysis.js      resumen y potencial de propagación (lógica pura)
+unit/            pruebas de la lógica de análisis (npm test)
 public/          index.html, style.css, app.js (Leaflet)
 tests/           pruebas automáticas con Playwright (e2e.spec.js)
 data/            solo si no hay DATABASE_URL: reports.json de respaldo local
@@ -52,6 +56,33 @@ data/            solo si no hay DATABASE_URL: reports.json de respaldo local
 - `GET /api/fires?days=2` → detecciones reales (MODIS + VIIRS).
 - `GET /api/analysis?days=10` → calendario armonizado con anomalías.
 - Enviar un reporte desde la pestaña "Reportar" y gestionarlo desde "Bomberos".
+
+## Resumen ambiental de cada foco (Google Earth Engine)
+Al abrir un foco en el mapa, el servidor lee datos del lugar y arma un resumen en español: viento, temperatura y humedad del aire, humedad del suelo, lluvia, tipo de suelo, vegetación, degradación del suelo, relieve y cambios en la superficie, con un **potencial de propagación** orientativo. Cada dato muestra su fecha y su fuente en "Datos por fuente".
+
+| Dato | Fuente (id en Earth Engine) |
+|---|---|
+| Humedad superficial y de raíces | NASA SMAP L4 `NASA/SMAP/SPL4SMGP/008` |
+| Precipitación | NASA GPM IMERG `NASA/GPM_L3/IMERG_V07` y CHIRPS `UCSB-CHG/CHIRPS/DAILY` |
+| Arcilla y limo | ISRIC SoilGrids `projects/soilgrids-isric/clay_mean`, `silt_mean` |
+| Viento, temperatura, humedad del aire | ECMWF ERA5-Land `ECMWF/ERA5_LAND/HOURLY` |
+| Elevación y pendiente | USGS SRTM `USGS/SRTMGL1_003` |
+| Vegetación y degradación del suelo | Copernicus Sentinel-2 `COPERNICUS/S2_SR_HARMONIZED` |
+| Cambios en la superficie | Copernicus Sentinel-1 `COPERNICUS/S1_GRD` (retrodispersión radar; **no** mide deformación) |
+| Cobertura del terreno (extra) | ESA WorldCover `ESA/WorldCover/v200` |
+
+**Cómo se calcula el potencial de propagación:** suma puntos por viento, aire seco, temperatura, humedad del suelo, falta de lluvia, vegetación seca, pendiente y presencia de vegetación que pueda quemarse (ver `analysis.js`). Es una regla simple del proyecto, **no un modelo validado**, y no confirma que haya un incendio. Los datos con más de unos días de antigüedad no entran al puntaje y se avisa la fecha. Si una fuente falla, se muestra "sin dato" y las demás siguen.
+
+### Cómo conectar Earth Engine
+1. Registrá un proyecto de Google Cloud para Earth Engine en https://code.earthengine.google.com/register (uso no comercial).
+2. En Google Cloud Console, en ese proyecto, activá la API de Earth Engine y creá una **cuenta de servicio** (IAM y administración > Cuentas de servicio). Dale los roles "Lector de recursos de Earth Engine" y "Consumidor de Service Usage".
+3. En la cuenta de servicio creá una **clave JSON** y descargala. Tratala como una contraseña: no la subas a GitHub.
+4. Cargá dos variables de entorno (en Render: Environment):
+   - `GEE_PROJECT`: el id del proyecto de Google Cloud.
+   - `GEE_SERVICE_ACCOUNT_JSON`: el contenido completo del archivo JSON.
+5. Reiniciá el servicio. `/api/health` debe mostrar `"earthEngineConfigured":true`.
+
+Sin estas variables la web funciona igual y el foco muestra que el resumen todavía no está configurado. Cada consulta puede tardar de 10 a 60 segundos; los resultados se guardan en caché 3 horas por celda de unos 1 km, y hay un límite de consultas por conexión.
 
 ## Pruebas automáticas (Playwright)
 Las pruebas abren la web en un navegador real y comprueban las funciones principales: carga y aviso de emergencia, mapa con datos de NASA, calendario con sus gráficos, envío de un reporte, panel de Bomberos, que la clave de NASA no se filtre al navegador y que un texto con inyección SQL se guarde como texto.

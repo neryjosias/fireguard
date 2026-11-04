@@ -9,6 +9,8 @@ import path from 'path';
 import crypto from 'crypto';
 import pg from 'pg';
 import { fileURLToPath } from 'url';
+import { eeConfigured, fetchEnvironment } from './earth.js';
+import { buildSummary } from './analysis.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -451,6 +453,50 @@ app.get('/api/admin/alerts', admin, wrap(async (req, res) => {
   res.json(alerts);
 }));
 
-app.get('/api/health', (req, res) => res.json({ ok: true, firmsKeyConfigured: !!MAP_KEY, adminConfigured: !!ADMIN_TOKEN, storage: store.kind }));
+// Resumen ambiental de un foco (Google Earth Engine). Se consulta al abrir el foco en el mapa.
+// Caché de 3 horas por celda de ~1 km (5 minutos si alguna fuente falló) y límite de consultas simultáneas.
+const focusCache = new Map();
+let focusInflight = 0;
+function getFocus(lat, lon) {
+  const rl = Number(lat.toFixed(2)), ro = Number(lon.toFixed(2));
+  const key = `${rl}|${ro}`;
+  const hit = focusCache.get(key);
+  if (hit && hit.exp > Date.now()) return hit.p;
+  if (focusInflight >= 4) { const e = new Error('ocupado'); e.busy = true; return Promise.reject(e); }
+  focusInflight++;
+  const entry = { exp: Date.now() + 3 * 3600e3, p: null };
+  entry.p = fetchEnvironment(rl, ro)
+    .then(({ raw, errors }) => {
+      if (Object.keys(errors).length) entry.exp = Date.now() + 5 * 60e3;
+      return buildSummary(raw, errors);
+    })
+    .catch((e) => { focusCache.delete(key); throw e; })
+    .finally(() => { focusInflight--; });
+  focusCache.set(key, entry);
+  if (focusCache.size > 500) focusCache.delete(focusCache.keys().next().value);
+  return entry.p;
+}
+
+app.get('/api/focus', async (req, res) => {
+  if (!eeConfigured()) {
+    return res.status(503).json({ configured: false, error: 'Los datos ambientales todavía no están configurados en el servidor (falta conectar Google Earth Engine).' });
+  }
+  const lat = Number(req.query.lat), lon = Number(req.query.lon);
+  if (!(lat >= BBOX.s && lat <= BBOX.n && lon >= BBOX.w && lon <= BBOX.e)) {
+    return res.status(400).json({ error: 'La ubicación debe estar dentro de Paraguay.' });
+  }
+  if (rateLimited(`focus|${req.ip}`, 20, 600e3)) {
+    return res.status(429).json({ error: 'Demasiadas consultas desde tu conexión. Probá de nuevo en unos minutos.' });
+  }
+  try {
+    res.json({ configured: true, lat, lon, summary: await getFocus(lat, lon) });
+  } catch (e) {
+    console.error('[EE]', e.message);
+    if (e.busy) return res.status(429).json({ error: 'Hay muchas consultas en curso. Probá de nuevo en un minuto.' });
+    res.status(502).json({ error: 'No se pudieron leer los datos de Earth Engine: ' + e.message });
+  }
+});
+
+app.get('/api/health', (req, res) => res.json({ ok: true, firmsKeyConfigured: !!MAP_KEY, adminConfigured: !!ADMIN_TOKEN, storage: store.kind, earthEngineConfigured: eeConfigured() }));
 
 app.listen(PORT, () => console.log(`FIREGUARD escuchando en http://localhost:${PORT}`));
