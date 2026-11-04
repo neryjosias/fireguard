@@ -105,6 +105,7 @@ function drawFires() {
 document.querySelectorAll('input[name="days"]').forEach((i) => i.addEventListener('change', loadFires));
 $('#btnReload').addEventListener('click', () => { loadFires(); loadPublicReports(); });
 $('#btnPY').addEventListener('click', () => map.fitBounds(PY_BOUNDS));
+$('#btnReportar').addEventListener('click', () => { showTab('reportar'); window.scrollTo({ top: 0 }); });
 $('#btnLoc').addEventListener('click', () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite usar la ubicación.');
   navigator.geolocation.getCurrentPosition((p) => map.setView([p.coords.latitude, p.coords.longitude], 11), () => alert('No se pudo obtener tu ubicación. Revisá el permiso del navegador.'));

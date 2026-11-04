@@ -58,7 +58,10 @@
         </div>
       </div>
       <p id="mapStatus" class="status" role="status" aria-live="polite">Consultando NASA FIRMS…</p>
-      <div id="map" aria-label="Mapa de detecciones térmicas en Paraguay"></div>
+      <div class="mapbox">
+        <div id="map" aria-label="Mapa de detecciones térmicas en Paraguay"></div>
+        <button id="btnReportar" class="btn danger sos" type="button">Reportar emergencia</button>
+      </div>
       <p class="note">Cada marca es una detección térmica de un satélite. Puede ser una quema agrícola, una fuente industrial o una falsa alarma. Los satélites pasan a ciertas horas y no vigilan de forma continua.</p>
     </section>
 
