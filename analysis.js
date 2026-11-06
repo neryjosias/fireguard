@@ -89,6 +89,8 @@ export function rainStats(series) {
 const fmt = (n, d = 0) => (n == null || !Number.isFinite(n) ? '—' : n.toFixed(d).replace('.', ','));
 const dateOf = (ms) => (ms == null ? null : new Date(ms).toISOString().slice(0, 10));
 const ageDays = (ms, now) => (ms == null ? Infinity : (now - ms) / DAY);
+const dias = (n) => `${n} ${n === 1 ? 'día' : 'días'}`;
+const fdate = (ms) => { const d = dateOf(ms); return d ? d.split('-').reverse().join('/') : ''; };
 const list = (arr) => (arr.length <= 1 ? arr.join('') : arr.slice(0, -1).join(', ') + ' y ' + arr[arr.length - 1]);
 
 // ---------- Resumen ----------
@@ -111,15 +113,15 @@ export function buildSummary(raw, errors = {}, now = Date.now()) {
     const rh = e.t2m != null && e.d2m != null ? relativeHumidity(tC, kelvinToC(e.d2m)) : null;
     const old = ageDays(e.time, now) > MAX_AGE.era5;
     const when = dateOf(e.time);
-    const stale = old ? ` Es el último dato disponible (${when}), no representa las condiciones de hoy y no se usa en el puntaje.` : '';
+    const stale = old ? ` Es el último dato disponible (${fdate(e.time)}); no representa las condiciones de hoy y no se usa en el puntaje.` : '';
     row('Viento (ECMWF ERA5-Land)', `${fmt(kmh, 0)} km/h desde el ${compass(from)} (${fmt(from, 0)}°)`, when, 'ECMWF/ERA5_LAND/HOURLY');
     row('Movimiento del aire (ERA5-Land)', `componente este-oeste ${fmt(e.u, 1)} m/s, norte-sur ${fmt(e.v, 1)} m/s`, when, 'ECMWF/ERA5_LAND/HOURLY');
     row('Temperatura del aire (ERA5-Land)', tC == null ? null : `${fmt(tC, 1)} °C` + (rh == null ? '' : `, humedad relativa ${fmt(rh, 0)} %`), when, 'ECMWF/ERA5_LAND/HOURLY');
     items.push({
       label: 'Viento',
-      text: (kmh < 5 ? `Casi sin viento (${fmt(kmh, 0)} km/h).` : `Viento del ${compass(from)} a ${fmt(kmh, 0)} km/h, que empuja el fuego hacia el ${windToward}.`) + stale,
+      text: (kmh < 5 ? `Casi sin viento (${fmt(kmh, 0)} km/h).` : `Sopla del ${compass(from)} a ${fmt(kmh, 0)} km/h y empujaría el fuego hacia el ${windToward}.`) + stale,
     });
-    if (tC != null) items.push({ label: 'Aire', text: `${fmt(tC, 0)} °C` + (rh != null ? ` y humedad relativa de ${fmt(rh, 0)} %` : '') + (rh != null && rh < 30 ? ': aire muy seco' : '') + '.' });
+    if (tC != null) items.push({ label: 'Aire', text: `Temperatura de ${fmt(tC, 0)} °C` + (rh != null ? ` y humedad relativa de ${fmt(rh, 0)} %` : '') + '.' + (rh != null && rh < 30 ? ' El aire está muy seco.' : '') });
     if (!old) {
       const wp = kmh < 8 ? 0 : kmh < 15 ? 8 : kmh < 25 ? 15 : kmh < 35 ? 20 : 25;
       factors.push({ key: 'viento', label: 'viento', points: wp, max: 25, up: wp >= 15, down: wp === 0 });
@@ -142,7 +144,7 @@ export function buildSummary(raw, errors = {}, now = Date.now()) {
     const rel = pct == null ? '' : pct < 25 ? ', más seca de lo habitual para esta época' : pct > 75 ? ', más húmeda de lo habitual' : ', dentro de lo habitual';
     items.push({
       label: 'Suelo (humedad)',
-      text: `Humedad en superficie ${sm.sm_surface == null ? 'sin dato' : fmt(sm.sm_surface * 100, 0) + ' %'} y en la zona de raíces ${sm.sm_rootzone == null ? 'sin dato' : fmt(sm.sm_rootzone * 100, 0) + ' %'}${rel}.` + (old ? ` Dato del ${when}, no se usa en el puntaje.` : ''),
+      text: `En la superficie ${sm.sm_surface == null ? 'sin dato' : fmt(sm.sm_surface * 100, 0) + ' %'} y en la zona de raíces ${sm.sm_rootzone == null ? 'sin dato' : fmt(sm.sm_rootzone * 100, 0) + ' %'}${rel}.` + (old ? ` Dato del ${fdate(sm.time)}; no se usa en el puntaje.` : ''),
     });
     if (!old) {
       let p;
@@ -160,14 +162,14 @@ export function buildSummary(raw, errors = {}, now = Date.now()) {
   const im = raw.imerg;
   const chirpsFresh = rs && ageDays(rs.lastT, now) <= MAX_AGE.chirps;
   const imergFresh = im && im.mm7 != null && ageDays(im.time, now) <= MAX_AGE.imerg;
-  if (rs) row('Lluvia diaria (CHIRPS)', `${fmt(rs.mm30, 0)} mm en 30 días, ${rs.dryDays} días secos seguidos`, dateOf(rs.lastT), 'UCSB-CHG/CHIRPS/DAILY');
+  if (rs) row('Lluvia diaria (CHIRPS)', `${fmt(rs.mm30, 0)} mm en 30 días, ${dias(rs.dryDays)} secos seguidos`, dateOf(rs.lastT), 'UCSB-CHG/CHIRPS/DAILY');
   else row('Lluvia diaria (CHIRPS)', null, '', 'UCSB-CHG/CHIRPS/DAILY');
   if (im && im.mm7 != null) row('Precipitación de 7 días (NASA GPM IMERG)', `${fmt(im.mm7, 1)} mm`, dateOf(im.time), 'NASA/GPM_L3/IMERG_V07');
   else row('Precipitación de 7 días (NASA GPM IMERG)', null, '', 'NASA/GPM_L3/IMERG_V07');
   const rainBits = [];
-  if (rs) rainBits.push(`${rs.dryDays} días seguidos sin lluvia significativa y ${fmt(rs.mm30, 0)} mm en los últimos 30 días (CHIRPS, hasta el ${dateOf(rs.lastT)})`);
-  if (im && im.mm7 != null) rainBits.push(`${fmt(im.mm7, 1)} mm en los 7 días hasta el ${dateOf(im.time)} (GPM IMERG)`);
-  items.push({ label: 'Lluvia', text: rainBits.length ? rainBits.join('; ') + '.' : 'Sin datos de lluvia' + why('chirps') + '.' });
+  if (rs) rainBits.push(`${rs.dryDays === 0 ? 'Llovió en el último día con datos' : dias(rs.dryDays) + (rs.dryDays === 1 ? ' seguido' : ' seguidos') + ' sin lluvia significativa'}, y ${fmt(rs.mm30, 0)} mm en los últimos 30 días (CHIRPS, hasta el ${fdate(rs.lastT)})`);
+  if (im && im.mm7 != null) rainBits.push(`${fmt(im.mm7, 1)} mm en los 7 días hasta el ${fdate(im.time)} (GPM IMERG)`);
+  items.push({ label: 'Lluvia', text: rainBits.length ? rainBits.join('. Además, ') + '.' : 'Sin datos de lluvia' + why('chirps') + '.' });
   if (chirpsFresh) {
     const p = (rs.dryDays >= 15 ? 10 : rs.dryDays >= 8 ? 7 : rs.dryDays >= 4 ? 3 : 0) + (rs.days >= 20 && rs.mm30 < 40 ? 3 : 0);
     factors.push({ key: 'lluvia', label: 'falta de lluvia', points: p, max: 13, up: p >= 7, down: p === 0 });
@@ -243,7 +245,7 @@ export function buildSummary(raw, errors = {}, now = Date.now()) {
   if (r && r.vv_now != null) {
     const d = r.vv_prev != null ? r.vv_now - r.vv_prev : null;
     row('Cambio en la superficie (Copernicus Sentinel-1)', `retrodispersión VV ${fmt(r.vv_now, 1)} dB` + (d == null ? '' : `, cambio ${fmt(d, 1)} dB frente al período anterior`), '', 'COPERNICUS/S1_GRD');
-    if (d != null && Math.abs(d) >= 2) items.push({ label: 'Radar', text: `La señal radar cambió ${fmt(d, 1)} dB entre dos períodos: indica cambios de humedad o de vegetación en la superficie.` });
+    if (d != null && Math.abs(d) >= 2) items.push({ label: 'Radar', text: `La señal radar cambió ${fmt(d, 1)} dB entre dos períodos, lo que indica cambios de humedad o de vegetación en la superficie.` });
   } else {
     row('Cambio en la superficie (Copernicus Sentinel-1)', null, '', 'COPERNICUS/S1_GRD');
   }
