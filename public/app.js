@@ -111,17 +111,27 @@ function renderEnv(box, s) {
     calms.length ? el('p', { class: 'flag-title' }, 'Lo que lo frena') : null,
     calms.length ? el('ul', { class: 'tags' }, calms.map((f) => chip(f, 'calm'))) : null) : null;
   const wind = s.windToward ? el('p', { class: 'windline' }, el('span', { 'aria-hidden': 'true' }, '➜ '), `Si hubiera fuego, el viento lo llevaría hacia el ${s.windToward}.`) : null;
-  const detail = el('details', { class: 'more' }, el('summary', {}, 'Ver detalle del área'),
+  const KEYS = { 'Viento': ['viento'], 'Aire': ['aire', 'temp'], 'Suelo (humedad)': ['suelo'], 'Lluvia': ['lluvia'], 'Vegetación': ['veg', 'combustible'], 'Relieve': ['pendiente'] };
+  const toneOf = (label) => {
+    const fs = facs.filter((f) => (KEYS[label] || []).includes(f.key));
+    if (!fs.length) return 'info';
+    if (fs.some((f) => f.up)) return 'risk';
+    if (fs.every((f) => f.down)) return 'calm';
+    return 'mid';
+  };
+  const datos = el('div', { class: 'datos' },
+    el('p', { class: 'flag-title' }, 'Datos del área'),
+    ...s.items.map((i) => el('div', { class: 'dato ' + toneOf(i.label) }, el('b', {}, i.label), el('span', {}, i.text))));
+  const detail = el('details', { class: 'more' }, el('summary', {}, 'Fuentes, fechas y notas'),
     el('p', { class: 'concl' }, s.conclusion),
-    el('dl', { class: 'items' }, s.items.flatMap((i) => [el('dt', {}, i.label), el('dd', {}, i.text)])),
-    el('details', { class: 'src' }, el('summary', {}, 'Datos por fuente'),
+    el('div', { class: 'srcs' },
       ...s.rows.map((r) => el('div', { class: 'src-row' },
         el('b', {}, r.label), el('span', {}, r.value),
         r.date ? el('small', {}, 'Fecha: ' + r.date) : null,
         el('small', {}, 'Fuente: ' + r.source)))),
     el('p', { class: 'fine' }, s.notes.join(' ')));
   detail.addEventListener('toggle', () => requestAnimationFrame(() => box.dispatchEvent(new Event('resized'))));
-  box.replaceChildren(...top, flags, wind, detail);
+  box.replaceChildren(...top, flags, wind, datos, detail);
   requestAnimationFrame(() => { bar.style.width = (s.score || 0) + '%'; });
 }
 
