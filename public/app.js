@@ -68,6 +68,12 @@ legend.onAdd = () => el('div', { class: 'map-legend' },
 legend.addTo(map);
 
 // ---------- Resumen del área de un foco (se pide al abrirlo) ----------
+const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
+const sheet = el('aside', { class: 'sheet', hidden: '', 'aria-label': 'Detalle del foco' });
+$('.mapbox').append(sheet);
+function closeSheet() { sheet.hidden = true; sheet.replaceChildren(); $('.mapbox').classList.remove('sheet-open'); }
+map.on('click', () => { if (!sheet.hidden) closeSheet(); });
+
 async function loadEnv(box, lat, lon, popup) {
   if (box.dataset.state === 'loading' || box.dataset.state === 'done') return;
   box.dataset.state = 'loading';
@@ -87,8 +93,25 @@ async function loadEnv(box, lat, lon, popup) {
 }
 function renderEnv(box, s) {
   const lvl = s.level ? 'lvl-' + s.level.replace(' ', '-') : 'lvl-nd';
-  box.replaceChildren(
-    el('div', { class: 'lvl ' + lvl }, s.level ? `Potencial de propagación ${s.level}, ${s.score} de 100` : 'Potencial de propagación sin datos suficientes'),
+  const facs = (s.factors || []).filter((f) => f.key !== 'combustible');
+  // Lo más importante: primero lo que favorece el fuego (rojo), luego lo que lo frena (verde)
+  const risks = facs.filter((f) => f.up).sort((a, b) => b.points / b.max - a.points / a.max);
+  const calms = facs.filter((f) => f.down);
+  const chip = (f, kind) => el('li', { class: 'tag ' + kind }, el('span', { class: 'arr', 'aria-hidden': 'true' }, kind === 'risk' ? '▲' : '▼'), f.label);
+  const bar = el('i', { class: lvl });
+  const top = [
+    el('div', { class: 'lvl ' + lvl },
+      el('b', {}, s.level ? `Potencial de propagación: ${s.level}` : 'Sin datos suficientes'),
+      s.level ? el('span', {}, `${s.score}/100`) : null),
+    s.level ? el('div', { class: 'meter', role: 'img', 'aria-label': `Potencial ${s.score} de 100` }, bar) : null,
+  ];
+  const flags = (risks.length || calms.length) ? el('div', { class: 'flags' },
+    risks.length ? el('p', { class: 'flag-title' }, 'Lo que favorece el fuego') : null,
+    risks.length ? el('ul', { class: 'tags' }, risks.map((f) => chip(f, 'risk'))) : null,
+    calms.length ? el('p', { class: 'flag-title' }, 'Lo que lo frena') : null,
+    calms.length ? el('ul', { class: 'tags' }, calms.map((f) => chip(f, 'calm'))) : null) : null;
+  const wind = s.windToward ? el('p', { class: 'windline' }, el('span', { 'aria-hidden': 'true' }, '➜ '), `Si hubiera fuego, el viento lo llevaría hacia el ${s.windToward}.`) : null;
+  const detail = el('details', { class: 'more' }, el('summary', {}, 'Ver detalle del área'),
     el('p', { class: 'concl' }, s.conclusion),
     el('dl', { class: 'items' }, s.items.flatMap((i) => [el('dt', {}, i.label), el('dd', {}, i.text)])),
     el('details', { class: 'src' }, el('summary', {}, 'Datos por fuente'),
@@ -97,6 +120,9 @@ function renderEnv(box, s) {
         r.date ? el('small', {}, 'Fecha: ' + r.date) : null,
         el('small', {}, 'Fuente: ' + r.source)))),
     el('p', { class: 'fine' }, s.notes.join(' ')));
+  detail.addEventListener('toggle', () => requestAnimationFrame(() => box.dispatchEvent(new Event('resized'))));
+  box.replaceChildren(...top, flags, wind, detail);
+  requestAnimationFrame(() => { bar.style.width = (s.score || 0) + '%'; });
 }
 
 async function loadFires() {
@@ -122,16 +148,33 @@ function drawFires() {
     const mk = sensor === 'MODIS'
       ? L.circleMarker([lat, lon], { radius: r + 1.5, color: COLOR.modis, weight: 2, fillColor: COLOR.modis, fillOpacity: 0.1 })
       : L.circleMarker([lat, lon], { radius: r, color: COLOR.viirs, weight: 1, fillColor: COLOR.viirs, fillOpacity: 0.6 });
-    const env = el('div', { class: 'env' });
-    mk.bindPopup(el('div', { class: 'focus' },
-      el('b', {}, `Detección térmica ${sensor}`), el('br'),
-      `Satélite: ${sat}`, el('br'),
-      `Fecha: ${date} ${time.slice(0, 2)}:${time.slice(2)} UTC`, el('br'),
-      `Confianza: ${CONF[conf]}`, el('br'),
-      `Potencia radiativa: ${frp} MW`, el('br'),
-      el('small', {}, 'Un foco satelital no confirma un incendio.'),
-      env), { maxWidth: 380, minWidth: 290, maxHeight: 460 });
-    mk.on('popupopen', (ev) => loadEnv(env, lat, lon, ev.popup));
+    const hh = `${time.slice(0, 2)}:${time.slice(2)}`;
+    mk.on('click', (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      const env = el('div', { class: 'env' });
+      const node = el('div', { class: 'focus' },
+        el('div', { class: 'focus-head' },
+          el('b', {}, `Detección térmica ${sensor}`),
+          isMobile() ? el('button', { class: 'sheet-x', type: 'button', 'aria-label': 'Cerrar', onclick: closeSheet }, '×') : null),
+        el('p', { class: 'facts' },
+          el('span', {}, `${date} ${hh} UTC`), el('span', {}, `Confianza ${CONF[conf]}`),
+          el('span', {}, `${frp} MW`), el('span', {}, sat)),
+        el('small', {}, 'Un foco satelital no confirma un incendio.'),
+        env);
+      if (isMobile()) {
+        map.closePopup();
+        sheet.replaceChildren(node); sheet.hidden = false; sheet.scrollTop = 0;
+        $('.mapbox').classList.add('sheet-open');
+        map.invalidateSize();
+        $('.mapbox').scrollIntoView({ block: 'start', behavior: 'smooth' });
+        map.panTo([lat, lon]);
+        loadEnv(env, lat, lon, { update() {} });
+      } else {
+        const pop = L.popup({ maxWidth: 380, minWidth: 290, maxHeight: 460 }).setLatLng([lat, lon]).setContent(node).openOn(map);
+        env.addEventListener('resized', () => pop.update());
+        loadEnv(env, lat, lon, pop);
+      }
+    });
     mk.addTo(fireLayer);
   }
   setStatus($('#mapStatus'), `${$('#mapStatus').dataset.base || ''} ${shown} de ${fires.length} detecciones visibles.`);
