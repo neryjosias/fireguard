@@ -270,5 +270,6 @@ export function buildSummary(raw, errors = {}, now = Date.now()) {
   }
   notes.push('Estimación orientativa con reglas simples del proyecto, no un modelo validado de comportamiento del fuego. Un foco satelital no confirma un incendio y esto no reemplaza el criterio de Bomberos.');
 
-  return { level, score, factorsUsed: have, conclusion: conclusion.trim(), items, rows, notes, generatedAt: new Date(now).toISOString() };
+  const factorList = factors.map((f) => ({ key: f.key, label: f.label, points: f.points, max: f.max, up: !!f.up, down: !!f.down }));
+  return { level, score, factorsUsed: have, factors: factorList, windToward: windToward || null, conclusion: conclusion.trim(), items, rows, notes, generatedAt: new Date(now).toISOString() };
 }
