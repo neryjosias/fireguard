@@ -135,6 +135,11 @@ fieldset.seg legend { position: absolute; width: 1px; height: 1px; overflow: hid
 .g.sw { width: 16px; height: 10px; border-radius: 2px; vertical-align: 0; }
 .g.now { background: var(--uni); } .g.hist { background: var(--hist); }
 .g.stn { width: 18px; height: 18px; border-radius: 50%; background: #fff; vertical-align: -4px; }
+.g.cone { width: 20px; height: 10px; border-radius: 0; background: linear-gradient(90deg, #ffb03c, rgba(255, 90, 30, 0.15)); clip-path: polygon(0 40%, 100% 0, 100% 100%, 0 60%); }
+
+/* Capa animada de llamas y viento: encima de los focos, debajo de los cuarteles y sin recibir clics */
+.fire-anim { position: absolute; left: 0; top: 0; z-index: 450; pointer-events: none; transition: opacity 0.15s linear; }
+.wind-now { border-color: rgba(255, 140, 50, 0.5) !important; color: #ffc48a !important; }
 
 .btn {
   font: 600 0.88rem/1 var(--text); padding: 10px 15px; border-radius: 10px; cursor: pointer;
