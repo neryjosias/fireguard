@@ -236,13 +236,16 @@ fieldset.seg legend { position: absolute; width: 1px; height: 1px; overflow: hid
 .big-line + .fp-sub { text-align: center; }
 
 /* Aire */
-.air { display: flex; align-items: center; justify-content: space-around; gap: 10px; }
+.air { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 10px; }
 .air svg { height: auto; overflow: visible; }
-.air .thermo { width: 46px; }
-.air .rh { width: min(58%, 130px); }
-.air .temp-val { font: 600 1.6rem/1 var(--display); }
-.air .rh-num { font: 700 26px/1 var(--display); fill: #fff; }
-.air .rh-lbl { font: 600 12px/1 var(--text); fill: var(--ink-2); }
+.air .temp { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+.air .thermo { width: 34px; flex: none; }
+.air .temp-val { font: 600 clamp(1.15rem, 1.6vw, 1.6rem)/1 var(--display); white-space: nowrap; }
+.air .rh { position: relative; width: 100%; max-width: 124px; justify-self: center; }
+.air .rh svg { display: block; width: 100%; }
+.air .rh-val { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; line-height: 1; }
+.air .rh-val b { font: 700 clamp(1.15rem, 1.5vw, 1.55rem)/1 var(--display); color: #fff; }
+.air .rh-val small { font: 600 0.72rem/1 var(--text); color: var(--ink-2); margin-top: 4px; }
 
 /* Suelo */
 .bar-row { margin: 4px 0 12px; }
