@@ -272,6 +272,11 @@ footer p { max-width: 75ch; margin: 0; }
 .dato.info { border-left-color: var(--uni); }
 .srcs { margin-top: 6px; }
 
+/* Cuarteles de bomberos */
+.g.stn { background: var(--uni); border-radius: 4px; }
+.stn-pin span { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 5px; background: var(--uni); color: #fff; font: 700 12px/1 var(--display, sans-serif); border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+.near { margin: 6px 0 2px; padding: 6px 10px; border-left: 4px solid var(--uni); background: #eef3f8; border-radius: 0 8px 8px 0; font-size: 0.85rem; }
+
 /* ---------- Móvil ---------- */
 @media (max-width: 820px) {
   .sos { position: fixed; right: 16px; bottom: 16px; }

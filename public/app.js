@@ -56,6 +56,8 @@ const base = osm().addTo(map);
 L.control.layers({ Calles: base, Satélite: esri() }).addTo(map);
 const fireLayer = L.layerGroup().addTo(map);
 const reportLayer = L.layerGroup().addTo(map);
+const stationLayer = L.layerGroup().addTo(map);
+let stations = [];
 let fires = [];
 
 // Leyenda dentro del mapa: anillo = MODIS, punto = VIIRS, tamaño = potencia
@@ -64,8 +66,38 @@ legend.onAdd = () => el('div', { class: 'map-legend' },
   el('div', {}, el('i', { class: 'g ring' }), 'MODIS'),
   el('div', {}, el('i', { class: 'g dot' }), 'VIIRS'),
   el('div', {}, el('i', { class: 'g rep' }), 'Reporte ciudadano'),
+  el('div', {}, el('i', { class: 'g stn' }), 'Cuartel de bomberos'),
   el('div', {}, 'Más grande = más potencia'));
 legend.addTo(map);
+
+// ---------- Cuarteles de bomberos (archivo estático public/bomberos.json) ----------
+const rad = (x) => (x * Math.PI) / 180;
+function kmBetween(a, b, c, d) {
+  const h = Math.sin(rad(c - a) / 2) ** 2 + Math.cos(rad(a)) * Math.cos(rad(c)) * Math.sin(rad(d - b) / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(h));
+}
+function nearestStation(lat, lon) {
+  let best = null;
+  for (const s of stations) {
+    const km = kmBetween(lat, lon, s.lat, s.lon);
+    if (!best || km < best.km) best = { s, km };
+  }
+  return best;
+}
+const stationName = (s) => `${s.t} de ${s.d}`;
+async function loadStations() {
+  try {
+    stations = await api('/bomberos.json');
+    for (const s of stations) {
+      L.marker([s.lat, s.lon], {
+        icon: L.divIcon({ className: 'stn-pin', html: '<span>B</span>', iconSize: [20, 20] }),
+        zIndexOffset: -500, title: stationName(s),
+      }).bindPopup(el('div', {}, el('b', {}, 'Cuartel de bomberos'), el('br'), stationName(s), el('br'),
+        el('small', {}, `${s.b ? s.b + ', ' : ''}${s.d} (${s.p}). Emergencias: 911 / Bomberos 132.`))).addTo(stationLayer);
+    }
+  } catch { /* sin cuarteles */ }
+}
+$('#fStations').addEventListener('change', (e) => { e.target.checked ? map.addLayer(stationLayer) : map.removeLayer(stationLayer); });
 
 // ---------- Resumen del área de un foco (se pide al abrirlo) ----------
 const isMobile = () => window.matchMedia('(max-width: 820px)').matches;
@@ -170,6 +202,10 @@ function drawFires() {
           el('span', {}, `${date} ${hh} UTC`), el('span', {}, `Confianza ${CONF[conf]}`),
           el('span', {}, `${frp} MW`), el('span', {}, sat)),
         el('small', {}, 'Un foco satelital no confirma un incendio.'),
+        (() => {
+          const n = nearestStation(lat, lon);
+          return n ? el('p', { class: 'near' }, el('b', {}, 'Cuartel más cercano: '), `${stationName(n.s)}, a ${n.km < 10 ? n.km.toFixed(1).replace('.', ',') : Math.round(n.km)} km en línea recta.`) : null;
+        })(),
         env);
       if (isMobile()) {
         map.closePopup();
@@ -382,3 +418,4 @@ function renderAdminReport(r) {
 // ---------- Inicio ----------
 loadFires();
 loadPublicReports();
+loadStations();
