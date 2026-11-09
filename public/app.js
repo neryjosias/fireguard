@@ -55,6 +55,7 @@ function showTab(name) {
   if (name === 'reportar') setTimeout(() => pickMap.invalidateSize(), 50);
   if (name === 'calendario' && !calLoaded) loadCalendar();
   if (name === 'bomberos' && token) loadAdmin();
+  updateAnim();
 }
 
 // ---------- Mapa principal ----------
@@ -80,6 +81,7 @@ const legend = L.control({ position: 'bottomleft' });
 legend.onAdd = () => el('div', { class: 'map-legend' },
   el('div', {}, el('i', { class: 'g ring' }), 'MODIS'),
   el('div', {}, el('i', { class: 'g dot' }), 'VIIRS'),
+  el('div', {}, el('i', { class: 'g cone' }), 'Hacia dónde lo llevaría el viento'),
   el('div', {}, el('i', { class: 'g rep' }), 'Reporte ciudadano'),
   el('div', {}, el('img', { class: 'g stn', src: STATION_ICON, alt: '' }), 'Cuartel de bomberos'),
   el('div', {}, 'Más grande = más potencia'));
@@ -125,6 +127,7 @@ async function loadFires() {
     const failed = d.sourcesFailed.length ? ` Sin respuesta de: ${d.sourcesFailed.join(', ')}.` : '';
     $('#mapStatus').dataset.base = `Datos de NASA FIRMS del ${d.start} al ${d.end} (UTC).${failed}`;
     drawFires();
+    loadWind(fires);
   } catch (e) {
     setStatus($('#mapStatus'), 'No se pudieron cargar los datos: ' + e.message + ' Probá de nuevo con Actualizar.', 'err');
   }
@@ -146,7 +149,164 @@ function drawFires() {
   }
   setStatus($('#mapStatus'), `${$('#mapStatus').dataset.base || ''} ${visible.length} de ${fires.length} detecciones visibles.`);
   if (!selected) renderOverview();
+  updateAnim();
 }
+
+// ---------- Viento actual para todos los focos (Open-Meteo, sin clave) ----------
+// Los focos se agrupan en cuadros de 0,5° (~50 km): una sola consulta trae el viento de todos.
+const WIND_CELL = 0.5, WIND_TTL = 30 * 60e3;
+const windByCell = new Map();
+let windLoadedAt = 0;
+const cellKey = (lat, lon) => `${Math.floor(lat / WIND_CELL)},${Math.floor(lon / WIND_CELL)}`;
+const windAt = (lat, lon) => windByCell.get(cellKey(lat, lon)) || null;
+const DIRS = ['norte', 'noreste', 'este', 'sureste', 'sur', 'suroeste', 'oeste', 'noroeste'];
+const compassName = (deg) => DIRS[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+async function loadWind(points) {
+  if (Date.now() - windLoadedAt > WIND_TTL) windByCell.clear();
+  const need = new Map();
+  for (const p of points) {
+    const k = cellKey(p.lat, p.lon);
+    if (!windByCell.has(k) && !need.has(k)) need.set(k, k.split(',').map((n) => (Number(n) + 0.5) * WIND_CELL));
+  }
+  const keys = [...need.keys()];
+  for (let i = 0; i < keys.length; i += 100) {
+    const batch = keys.slice(i, i + 100);
+    const lat = batch.map((k) => need.get(k)[0].toFixed(2)).join(','), lon = batch.map((k) => need.get(k)[1].toFixed(2)).join(',');
+    try {
+      const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=kmh&timezone=UTC`);
+      if (!r.ok) throw new Error('Open-Meteo ' + r.status);
+      let j = await r.json();
+      if (!Array.isArray(j)) j = [j];
+      batch.forEach((k, n) => { const c = j[n] && j[n].current; if (c && c.wind_direction_10m != null) windByCell.set(k, { kmh: c.wind_speed_10m, from: c.wind_direction_10m, time: c.time }); });
+      windLoadedAt = Date.now();
+    } catch { /* sin viento: la animación muestra solo las llamas */ }
+  }
+  for (const p of fires) p.wind = windAt(p.lat, p.lon);
+  if (selected) { const chip = $('#windNow'); if (chip) chip.replaceWith(windNowChip(selected)); }
+  updateAnim(true);
+}
+function windNowChip(p) {
+  const w = p.wind;
+  return el('span', { id: 'windNow', class: 'wind-now' }, w
+    ? `Viento ahora: ${fmtN(w.kmh)} km/h hacia el ${compassName((w.from + 180) % 360)}`
+    : 'Viento ahora: sin dato');
+}
+
+// ---------- Animación: llama en cada foco + estela hacia donde lo llevaría el viento ----------
+// Se dibuja en un canvas encima del mapa (no recibe clics: los focos se siguen pudiendo tocar).
+const animCanvas = el('canvas', { class: 'fire-anim', 'aria-hidden': 'true' });
+map.getContainer().append(animCanvas);
+const actx = animCanvas.getContext('2d');
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+let dpr = 1, animRaf = 0, lastFrame = 0;
+
+// Dibujos base: se generan una vez y después solo se copian, rotados y escalados
+function sprite(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c; }
+const coneSprite = sprite(160, 80, (c, w, h) => {
+  const g = c.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, 'rgba(255,170,60,0.75)'); g.addColorStop(0.45, 'rgba(255,100,40,0.35)'); g.addColorStop(1, 'rgba(255,60,30,0)');
+  c.fillStyle = g;
+  c.beginPath(); c.moveTo(0, h / 2 - 4); c.lineTo(w * 0.92, 6); c.quadraticCurveTo(w, h / 2, w * 0.92, h - 6); c.lineTo(0, h / 2 + 4); c.closePath(); c.fill();
+});
+const flameSprite = sprite(40, 60, (c, w, h) => {
+  const flame = (sx, sy, col) => {
+    c.save(); c.translate(w / 2, h); c.scale(sx, sy);
+    c.beginPath(); c.moveTo(0, -56); c.bezierCurveTo(10, -38, 18, -24, 16, -12); c.bezierCurveTo(14, -2, 6, 2, 0, 2);
+    c.bezierCurveTo(-6, 2, -14, -2, -16, -12); c.bezierCurveTo(-18, -24, -10, -38, 0, -56); c.closePath();
+    c.fillStyle = col; c.fill(); c.restore();
+  };
+  const outer = c.createLinearGradient(0, h, 0, 0); outer.addColorStop(0, '#ff3b2f'); outer.addColorStop(0.6, '#ff7a1a'); outer.addColorStop(1, 'rgba(255,170,40,0.2)');
+  c.shadowColor = 'rgba(255,90,30,0.9)'; c.shadowBlur = 8;
+  flame(1, 1, outer);
+  c.shadowBlur = 0;
+  const inner = c.createLinearGradient(0, h, 0, h * 0.35); inner.addColorStop(0, '#fff3b0'); inner.addColorStop(1, 'rgba(255,200,60,0.1)');
+  flame(0.5, 0.55, inner);
+});
+const emberSprite = sprite(16, 16, (c, w) => {
+  const g = c.createRadialGradient(w / 2, w / 2, 0, w / 2, w / 2, w / 2);
+  g.addColorStop(0, 'rgba(255,240,180,1)'); g.addColorStop(0.4, 'rgba(255,150,40,0.9)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+  c.fillStyle = g; c.fillRect(0, 0, w, w);
+});
+const seedOf = (p) => { const s = Math.sin(p.lat * 12.9898 + p.lon * 78.233) * 43758.5453; return s - Math.floor(s); };
+
+function sizeAnim() {
+  const s = map.getSize();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  animCanvas.width = Math.round(s.x * dpr); animCanvas.height = Math.round(s.y * dpr);
+  animCanvas.style.width = s.x + 'px'; animCanvas.style.height = s.y + 'px';
+}
+function drawAnim(t) {
+  actx.setTransform(1, 0, 0, 1, 0, 0);
+  actx.clearRect(0, 0, animCanvas.width, animCanvas.height);
+  if (!$('#fAnim').checked) return;
+  const size = map.getSize();
+  const zf = Math.min(2.4, Math.max(0.55, 2 ** ((map.getZoom() - 7) * 0.6)));
+  const dense = visible.length > 400 && map.getZoom() < 7;
+  const pts = [];
+  for (const p of visible) {
+    const pt = map.latLngToContainerPoint([p.lat, p.lon]);
+    if (pt.x < -120 || pt.y < -120 || pt.x > size.x + 120 || pt.y > size.y + 120) continue;
+    pts.push([p, pt, p.seed ??= seedOf(p)]);
+  }
+  // 1) Estela del viento y brasas que avanzan en esa dirección
+  for (const [p, pt, seed] of pts) {
+    const w = p.wind;
+    if (!w || w.kmh < 2) continue;
+    const ang = rad((w.from + 180) % 360) - Math.PI / 2; // rumbo (0 = norte) a ángulo del canvas (0 = este)
+    const L = Math.min(95, 18 + w.kmh * 1.7) * zf * (0.85 + Math.min(0.5, Math.sqrt(p.frp) / 20));
+    const cos = Math.cos(ang), sin = Math.sin(ang);
+    actx.setTransform(dpr * cos, dpr * sin, -dpr * sin, dpr * cos, dpr * pt.x, dpr * pt.y);
+    actx.globalAlpha = (dense ? 0.45 : 0.7) * (0.75 + 0.25 * Math.sin(t * 2.2 + seed * 6.3));
+    actx.drawImage(coneSprite, 0, -L * 0.26, L, L * 0.52);
+    if (!dense) {
+      // Flecha en la punta: marca hacia dónde va
+      const a = Math.max(3.5, L * 0.09), bob = Math.sin(t * 3 + seed * 5) * a * 0.4;
+      actx.globalAlpha = 0.9;
+      actx.strokeStyle = '#ffc070'; actx.lineWidth = Math.max(1.5, a * 0.45); actx.lineCap = 'round'; actx.lineJoin = 'round';
+      actx.beginPath(); actx.moveTo(L - a * 1.6 + bob, -a); actx.lineTo(L + bob, 0); actx.lineTo(L - a * 1.6 + bob, a); actx.stroke();
+    }
+    const n = dense ? 2 : 3, speed = 0.22 + w.kmh / 70;
+    for (let k = 0; k < n; k++) {
+      const ph = (t * speed + seed + k / n) % 1;
+      const x = ph * L, y = Math.sin(ph * 7 + seed * 20 + k) * L * 0.1 * ph;
+      const s = (3 + 4 * (1 - ph)) * Math.min(1.5, Math.max(0.8, zf));
+      actx.globalAlpha = (1 - ph) * 0.95;
+      actx.drawImage(emberSprite, x - s / 2, y - s / 2, s, s);
+    }
+  }
+  // 2) Llamas encima, con un parpadeo distinto en cada foco
+  for (const [p, pt, seed] of pts) {
+    const sz = (0.75 + Math.min(1.1, Math.sqrt(p.frp) / 9)) * zf;
+    const fl = 1 + 0.13 * Math.sin(t * 11 + seed * 40) + 0.07 * Math.sin(t * 23 + seed * 17);
+    const sway = 0.06 * Math.sin(t * 5 + seed * 9);
+    const fw = 10 * sz, fh = 15 * sz * fl;
+    actx.setTransform(dpr, 0, dpr * sway, dpr, dpr * pt.x, dpr * pt.y);
+    actx.globalAlpha = dense ? 0.85 : 0.95;
+    actx.drawImage(flameSprite, -fw / 2, -fh * 0.8, fw, fh);
+  }
+  actx.globalAlpha = 1;
+}
+function animLoop(ts) {
+  animRaf = requestAnimationFrame(animLoop);
+  if (ts - lastFrame < 33) return; // ~30 cuadros por segundo alcanzan y ahorran batería
+  lastFrame = ts;
+  drawAnim(ts / 1000);
+}
+function updateAnim(redraw = false) {
+  const on = $('#fAnim').checked && $('#mapa').classList.contains('active') && !document.hidden;
+  if (on && !reducedMotion.matches) { if (!animRaf) animRaf = requestAnimationFrame(animLoop); return; }
+  if (animRaf) { cancelAnimationFrame(animRaf); animRaf = 0; }
+  if (on || redraw || !$('#fAnim').checked) drawAnim(0); // sin movimiento: dibujo fijo
+}
+sizeAnim();
+map.on('resize', () => { sizeAnim(); updateAnim(true); });
+map.on('zoomstart', () => { animCanvas.style.opacity = '0'; });
+map.on('zoomend', () => { animCanvas.style.opacity = ''; updateAnim(true); });
+map.on('moveend', () => { if (!animRaf) updateAnim(true); });
+$('#fAnim').addEventListener('change', () => updateAnim(true));
+document.addEventListener('visibilitychange', () => updateAnim());
+reducedMotion.addEventListener?.('change', () => updateAnim(true));
+map.attributionControl.addAttribution('Viento: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>');
 ['fMODIS', 'fVIIRS', 'fHigh'].forEach((id) => $('#' + id).addEventListener('change', drawFires));
 document.querySelectorAll('input[name="days"]').forEach((i) => i.addEventListener('change', loadFires));
 $('#btnReload').addEventListener('click', () => { loadFires(); loadPublicReports(); });
@@ -311,7 +471,8 @@ function focusHeader(p) {
     el('h3', {}, el('i', { class: 'g ' + (p.sensor === 'MODIS' ? 'ring' : 'dot') }), `Detección ${p.sensor}`),
     el('p', { class: 'facts' },
       el('span', {}, `${ddmm(p.date)} ${hh} UTC`), el('span', {}, `Confianza ${CONF[p.conf]}`),
-      el('span', {}, `${fmtN(p.frp, p.frp < 10 ? 1 : 0)} MW`), el('span', {}, p.sat), el('span', {}, `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`)),
+      el('span', {}, `${fmtN(p.frp, p.frp < 10 ? 1 : 0)} MW`), el('span', {}, p.sat), el('span', {}, `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`),
+      windNowChip(p)),
     el('button', { class: 'x', type: 'button', 'aria-label': 'Cerrar el análisis del foco', onclick: closeFocus }, '×'),
     el('p', { class: 'fhead-note' }, 'Un foco satelital no confirma un incendio.')));
 }
