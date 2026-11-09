@@ -55,6 +55,7 @@ function showTab(name) {
   if (name === 'reportar') setTimeout(() => pickMap.invalidateSize(), 50);
   if (name === 'calendario' && !calLoaded) loadCalendar();
   if (name === 'bomberos' && token) loadAdmin();
+  if (name === 'departamentos') renderDepartments();
   updateAnim();
 }
 
@@ -107,6 +108,8 @@ async function loadStations() {
       }).bindPopup(el('div', {}, el('b', {}, 'Cuartel de bomberos'), el('br'), stationName(s), el('br'),
         el('small', {}, `${s.b ? s.b + ', ' : ''}${s.d} (${s.p}). Emergencias: 911 / Bomberos 132.`))).addTo(stationLayer);
     }
+    assignDepts();
+    renderDepartments();
     if (!selected) renderOverview();
   } catch { /* sin cuarteles */ }
 }
@@ -148,7 +151,9 @@ function drawFires() {
     core.addTo(fireLayer);
   }
   setStatus($('#mapStatus'), `${$('#mapStatus').dataset.base || ''} ${visible.length} de ${fires.length} detecciones visibles.`);
+  assignDepts();
   if (!selected) renderOverview();
+  renderDepartments();
   updateAnim();
 }
 
@@ -310,7 +315,7 @@ map.attributionControl.addAttribution('Viento: <a href="https://open-meteo.com/"
 ['fMODIS', 'fVIIRS', 'fHigh'].forEach((id) => $('#' + id).addEventListener('change', drawFires));
 document.querySelectorAll('input[name="days"]').forEach((i) => i.addEventListener('change', loadFires));
 $('#btnReload').addEventListener('click', () => { loadFires(); loadPublicReports(); });
-$('#btnPY').addEventListener('click', () => map.fitBounds(PY_BOUNDS));
+$('#btnPY').addEventListener('click', () => goToDept(''));
 $('#btnReportar').addEventListener('click', () => { showTab('reportar'); window.scrollTo({ top: 0 }); });
 $('#btnLoc').addEventListener('click', () => {
   if (!navigator.geolocation) return alert('Tu navegador no permite usar la ubicación.');
@@ -321,6 +326,7 @@ async function loadPublicReports() {
   try {
     const list = await api('/api/reports');
     reportsCount = list.length;
+    reportsList = list;
     reportLayer.clearLayers();
     for (const r of list) {
       L.circleMarker([r.lat, r.lon], { radius: 7, color: '#ddd6fe', fillColor: COLOR.rep, fillOpacity: 0.9, weight: 2 })
@@ -400,21 +406,34 @@ const title = (text, small) => el('h3', { class: 'fp-title' }, text, small ? el(
 
 function renderOverview() {
   if (selected) return;
-  const modis = visible.filter((p) => p.sensor === 'MODIS').length;
-  const high = visible.filter((p) => p.conf === 'high').length;
-  const maxFrp = visible.reduce((a, p) => Math.max(a, p.frp), 0);
+  assignDepts();
+  const dep = selectedDept;
+  // Con un departamento elegido, los números y la lista son solo de ese departamento
+  const base = dep ? visible.filter((p) => p.dept === dep.id) : visible;
+  const modis = base.filter((p) => p.sensor === 'MODIS').length;
+  const high = base.filter((p) => p.conf === 'high').length;
+  const maxFrp = base.reduce((a, p) => Math.max(a, p.frp), 0);
+  const reps = dep ? reportsList.filter((r) => deptOf(r.lat, r.lon)?.id === dep.id).length : reportsCount;
   const kpi = (label, value, cls = '', glyph = null) => el('div', { class: 'card kpi ' + cls }, el('span', {}, glyph, label), el('b', {}, value));
-  const top = [...visible].sort((a, b) => b.frp - a.frp).slice(0, 6);
+  const top = [...base].sort((a, b) => b.frp - a.frp).slice(0, 6);
   panel.replaceChildren(
+    dep ? card('fp-full dept-head', el('div', { class: 'fhead' },
+      el('h3', {}, dep.name),
+      el('p', { class: 'facts' },
+        el('span', {}, dep.num ? `Departamento ${deptNum(dep)}` : 'Distrito Capital'),
+        dep.num ? el('span', {}, `Capital: ${dep.capital}`) : null,
+        el('span', {}, `${stationsIn(dep)} ${stationsIn(dep) === 1 ? 'cuartel' : 'cuarteles'}`)),
+      el('button', { class: 'x', type: 'button', 'aria-label': 'Volver a todo Paraguay', onclick: () => goToDept('') }, '×'),
+      el('p', { class: 'fhead-note' }, 'Los números de abajo son solo de este departamento. El mapa sigue mostrando los focos vecinos.'))) : null,
     el('div', { class: 'fp-full kpis' },
-      kpi('Detecciones', fmtN(visible.length), 'hot'),
+      kpi('Detecciones', fmtN(base.length), 'hot'),
       kpi('MODIS', fmtN(modis), '', el('i', { class: 'g ring' })),
-      kpi('VIIRS', fmtN(visible.length - modis), '', el('i', { class: 'g dot' })),
+      kpi('VIIRS', fmtN(base.length - modis), '', el('i', { class: 'g dot' })),
       kpi('Confianza alta', fmtN(high)),
       kpi('Potencia máx.', `${fmtN(maxFrp)} MW`, 'hot'),
-      kpi('Reportes', reportsCount == null ? '—' : fmtN(reportsCount), 'cy', el('i', { class: 'g rep' }))),
+      kpi('Reportes', reps == null ? '—' : fmtN(reps), 'cy', el('i', { class: 'g rep' }))),
     card('fp-full hint', icon('pin'), el('p', {}, el('b', {}, 'Tocá un foco en el mapa '), 'para ver su análisis: puntaje de propagación, viento, aire, suelo, lluvia, vegetación y los cuarteles de bomberos más cercanos.')),
-    card('fp-full', title('Focos más intensos', 'por potencia radiativa (FRP)'),
+    card('fp-full', title(dep ? `Focos más intensos en ${dep.name}` : 'Focos más intensos', 'por potencia radiativa (FRP)'),
       top.length ? el('ul', { class: 'toplist' }, top.map((p) => {
         const n = nearestStations(p.lat, p.lon, 1)[0];
         return el('li', {}, el('button', { type: 'button', onclick: () => openFocus(p, true) },
@@ -422,7 +441,7 @@ function renderOverview() {
           el('span', { class: 'where' }, `${p.sensor} · ${ddmm(p.date)} ${p.time.slice(0, 2)}:${p.time.slice(2)} UTC`,
             el('small', {}, n ? `Cuartel más cercano: ${n.s.d} (${n.s.p}), a ${fmtKm(n.km)} km` : `${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}`)),
           el('span', { class: 'frp' }, `${fmtN(p.frp)} MW`)));
-      })) : el('p', { class: 'fp-empty' }, fires.length ? 'Ningún foco coincide con los filtros.' : 'Cargando detecciones…')));
+      })) : el('p', { class: 'fp-empty' }, !fires.length ? 'Cargando detecciones…' : dep ? `No hay focos en ${dep.name} con estos filtros.` : 'Ningún foco coincide con los filtros.')));
 }
 
 function closeFocus() {
@@ -846,7 +865,7 @@ $('#repForm').addEventListener('submit', async (e) => {
   try {
     const r = await api('/api/reports', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ...picked, description: $('#repDesc').value, name: $('#repName').value, contact: $('#repContact').value }),
+      body: JSON.stringify({ ...picked, description: $('#repDesc').value, name: $('#repName').value, contact: $('#repContact').value, website: $('#repWebsite').value }),
     });
     setStatus($('#repMsg'), `Reporte enviado con el código ${r.id}. Queda pendiente hasta que Bomberos lo revise. Si hay peligro, llamá al 911 o al 132.`, 'ok');
     $('#repForm').reset();
@@ -911,8 +930,173 @@ function renderAdminReport(r) {
     el('ul', { class: 'hist' }, r.history.map((h) => el('li', {}, `${fmtDateTime(h.at)}: ${h.status}${h.note ? '. ' + h.note : ''}`))));
 }
 
+// ---------- Departamentos (17 + Distrito Capital) ----------
+// Límites: DGEEC vía geoBoundaries (CC BY 4.0), simplificados en public/departamentos.json.
+// Cada anillo viene "plano": [lon0, lat0, lon1, lat1, ...] para que el archivo pese menos.
+let departments = [], selectedDept = null, deptHighlight = null, reportsList = [], deptSvgBuilt = false;
+const deptLayer = L.layerGroup().addTo(map);
+const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII'];
+const REGION = { oriental: 'Región Oriental', occidental: 'Chaco (Región Occidental)', capital: 'Distrito Capital' };
+const deptNum = (d) => (d.num ? ROMAN[d.num] : 'Capital');
+const ringLatLngs = (r) => { const out = []; for (let i = 0; i < r.length; i += 2) out.push([r[i + 1], r[i]]); return out; };
+function inRing(r, x, y) {
+  let inside = false;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const xi = r[i], yi = r[i + 1], xj = r[j], yj = r[j + 1];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function deptOf(lat, lon) {
+  for (const d of departments) {
+    const [w, s, e, n] = d.bbox;
+    if (lon < w || lon > e || lat < s || lat > n) continue;
+    if (d.rings.some((r) => inRing(r, lon, lat))) return d;
+  }
+  return null;
+}
+const norm = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+function assignDepts() {
+  if (!departments.length) return;
+  for (const p of fires) if (p.dept === undefined) p.dept = deptOf(p.lat, p.lon)?.id ?? null;
+  // Los cuarteles ya traen su departamento en bomberos.json (campo "p"); si no coincide, se ubica por coordenadas
+  for (const s of stations) if (s.dept === undefined) s.dept = (departments.find((d) => norm(d.name) === norm(s.p)) || deptOf(s.lat, s.lon))?.id ?? null;
+}
+const stationsIn = (d) => stations.filter((s) => s.dept === d.id).length;
+
+async function loadDepartments() {
+  try {
+    departments = (await api('/departamentos.json')).departments;
+    for (const d of departments) L.polygon(d.rings.map(ringLatLngs), { color: '#3f7489', weight: 1, opacity: 0.6, fill: false, interactive: false }).addTo(deptLayer);
+    $('#deptSelect').append(...[...departments].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      .map((d) => el('option', { value: d.id }, d.num ? d.name : `${d.name} (Distrito Capital)`)));
+    assignDepts();
+    renderDepartments();
+    if (!selected) renderOverview();
+  } catch {
+    setStatus($('#deptStatus'), 'No se pudieron cargar los límites de los departamentos. Probá recargar la página.', 'err');
+  }
+}
+
+// Ir directo a un departamento: lo resalta, lo encuadra en el mapa y filtra el panel. '' = todo Paraguay.
+function goToDept(id) {
+  const d = departments.find((x) => x.id === id) || null;
+  if (selected) closeFocus();
+  if (deptHighlight) { map.removeLayer(deptHighlight); deptHighlight = null; }
+  selectedDept = d;
+  $('#deptSelect').value = d ? d.id : '';
+  showTab('mapa');
+  map.invalidateSize();
+  if (d) {
+    deptHighlight = L.polygon(d.rings.map(ringLatLngs), { color: '#22d3ee', weight: 2.5, fillColor: '#22d3ee', fillOpacity: 0.07, interactive: false }).addTo(map);
+    map.fitBounds([[d.bbox[1], d.bbox[0]], [d.bbox[3], d.bbox[2]]], { padding: [24, 24] });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  } else {
+    map.fitBounds(PY_BOUNDS);
+  }
+  renderOverview();
+}
+$('#deptSelect').addEventListener('change', (e) => goToDept(e.target.value));
+
+// Proyección simple para dibujar Paraguay en SVG (lon corregida por la latitud media)
+const K = Math.cos(rad(23.4));
+function pathOf(rings, w, n, sc) {
+  return rings.map((r) => {
+    let s = '';
+    for (let i = 0; i < r.length; i += 2) s += (i ? 'L' : 'M') + ((r[i] - w) * K * sc).toFixed(1) + ' ' + ((n - r[i + 1]) * sc).toFixed(1);
+    return s + 'Z';
+  }).join('');
+}
+function centroidOf(r) { // centro de masa del anillo más grande, para poner la etiqueta
+  let a = 0, cx = 0, cy = 0;
+  for (let i = 0, j = r.length - 2; i < r.length; j = i, i += 2) {
+    const f = r[j] * r[i + 1] - r[i] * r[j + 1];
+    a += f; cx += (r[j] + r[i]) * f; cy += (r[j + 1] + r[i + 1]) * f;
+  }
+  return a ? [cx / (3 * a), cy / (3 * a)] : [r[0], r[1]];
+}
+function miniSvg(d) {
+  const [w, s, e, n] = d.bbox, sc = 52 / Math.max((e - w) * K, n - s);
+  const ox = (56 - (e - w) * K * sc) / 2, oy = (56 - (n - s) * sc) / 2;
+  return svg('svg', { class: 'dc-mini', viewBox: '0 0 56 56', 'aria-hidden': 'true' },
+    svg('path', { d: pathOf(d.rings, w, n, sc), transform: `translate(${ox.toFixed(1)} ${oy.toFixed(1)})` }));
+}
+function buildDeptMap() {
+  const all = departments.map((d) => d.bbox);
+  const w = Math.min(...all.map((b) => b[0])), s = Math.min(...all.map((b) => b[1]));
+  const e = Math.max(...all.map((b) => b[2])), n = Math.max(...all.map((b) => b[3]));
+  const sc = 1000 / ((e - w) * K), H = (n - s) * sc;
+  const root = svg('svg', { viewBox: `-6 -6 1012 ${(H + 12).toFixed(0)}`, class: 'dept-svg', role: 'img', 'aria-label': 'Mapa de Paraguay dividido en sus 17 departamentos y Asunción' });
+  const labels = [];
+  for (const d of departments) {
+    const big = d.rings.reduce((a, r) => (r.length > a.length ? r : a), d.rings[0]);
+    const path = svg('path', { class: 'dept-path lv0', 'data-id': d.id, d: pathOf(d.rings, w, n, sc) }, svg('title', {}, d.name));
+    path.addEventListener('click', () => goToDept(d.id));
+    path.addEventListener('mouseenter', () => $(`#deptList [data-id="${d.id}"]`)?.classList.add('hover'));
+    path.addEventListener('mouseleave', () => $(`#deptList [data-id="${d.id}"]`)?.classList.remove('hover'));
+    root.append(path);
+    if (d.num) {
+      const [cx, cy] = centroidOf(big);
+      labels.push(svg('text', { class: 'dept-lbl', x: ((cx - w) * K * sc).toFixed(0), y: ((n - cy) * sc + 6).toFixed(0), 'text-anchor': 'middle' }, ROMAN[d.num]));
+    }
+  }
+  root.append(...labels); // las etiquetas van arriba de todas las formas
+  $('#deptMap').replaceChildren(root);
+  deptSvgBuilt = true;
+}
+
+function renderDepartments() {
+  if (!departments.length || !$('#departamentos').classList.contains('active')) return;
+  if (!deptSvgBuilt) buildDeptMap();
+  assignDepts();
+  const st = new Map(departments.map((d) => [d.id, { n: 0, max: 0, high: 0 }]));
+  let outside = 0;
+  for (const p of visible) {
+    const s = st.get(p.dept);
+    if (!s) { outside++; continue; }
+    s.n++; s.max = Math.max(s.max, p.frp); if (p.conf === 'high') s.high++;
+  }
+  const max = Math.max(1, ...[...st.values()].map((s) => s.n));
+  const days = radio('days');
+  setStatus($('#deptStatus'), !fires.length ? 'Cargando focos…'
+    : `${fmtN(visible.length - outside)} focos dentro de Paraguay en ${days === '1' ? 'el último día' : `los últimos ${days} días`} (el período y los filtros se eligen en la pestaña Mapa)` +
+      (outside ? `. Otros ${fmtN(outside)} caen en países vecinos y no se cuentan.` : '.'));
+
+  document.querySelectorAll('#deptMap .dept-path').forEach((p) => {
+    const s = st.get(p.dataset.id), d = departments.find((x) => x.id === p.dataset.id);
+    p.setAttribute('class', `dept-path lv${heatLevel(s.n, max)}${selectedDept?.id === d.id ? ' sel' : ''}`);
+    p.querySelector('title').textContent = `${d.name}: ${s.n} ${s.n === 1 ? 'foco' : 'focos'}`;
+  });
+
+  const byAct = radio('deptSort') === 'act';
+  const list = [...departments].sort(byAct ? (a, b) => st.get(b.id).n - st.get(a.id).n || a.num - b.num : (a, b) => a.num - b.num);
+  $('#deptList').replaceChildren(...list.map((d) => {
+    const s = st.get(d.id), cuarteles = stationsIn(d);
+    return el('button', {
+      type: 'button', class: `card dept-card lv${heatLevel(s.n, max)}${selectedDept?.id === d.id ? ' sel' : ''}`, 'data-id': d.id,
+      'aria-label': `Ir a ${d.name}: ${s.n} focos, ${cuarteles} cuarteles de bomberos`,
+      onclick: () => goToDept(d.id),
+      onmouseenter: () => $(`#deptMap [data-id="${d.id}"]`)?.classList.add('hover'),
+      onmouseleave: () => $(`#deptMap [data-id="${d.id}"]`)?.classList.remove('hover'),
+    },
+      miniSvg(d),
+      el('span', { class: 'dc-body' },
+        el('span', { class: 'dc-top' }, el('span', { class: 'dc-num' }, deptNum(d)), el('span', { class: 'dc-region' }, REGION[d.region])),
+        el('b', { class: 'dc-name' }, d.name),
+        el('small', { class: 'dc-cap' }, d.num ? `Capital: ${d.capital}` : 'Capital del país'),
+        el('span', { class: 'dc-stats' },
+          el('span', { class: 'dc-fires' }, el('b', {}, fmtN(s.n)), s.n === 1 ? ' foco' : ' focos'),
+          el('span', { title: 'Cuarteles de bomberos' }, el('img', { src: STATION_ICON, alt: '' }), fmtN(cuarteles)),
+          s.max ? el('span', { class: 'dc-max' }, `máx. ${fmtN(s.max)} MW`) : null),
+        el('span', { class: 'dc-bar', 'aria-hidden': 'true' }, el('i', { style: `width:${((s.n / max) * 100).toFixed(1)}%` }))),
+      el('span', { class: 'dc-go', 'aria-hidden': 'true' }, '→'));
+  }));
+}
+document.querySelectorAll('input[name="deptSort"]').forEach((i) => i.addEventListener('change', renderDepartments));
+
 // ---------- Inicio ----------
 renderOverview();
+loadDepartments();
 loadFires();
 loadPublicReports();
 loadStations();
