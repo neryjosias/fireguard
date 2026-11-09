@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
   <link rel="stylesheet" href="style.css">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2307121a'/%3E%3Cpath fill='%23ff6b2c' d='M12.2 2.8c.6 3.3 4.4 5.1 4.4 9.5a4.6 4.6 0 0 1-9.2 0c0-1.9.9-3.1 1.9-4.1.2 1.2.7 2 1.5 2.3-.3-2.5.2-5.3 1.4-7.7Z'/%3E%3C/svg%3E">
 </head>
@@ -27,6 +27,7 @@
       </a>
       <nav id="tabs" role="tablist" aria-label="Secciones">
         <button role="tab" data-tab="mapa" aria-controls="mapa" aria-selected="true" class="active">Mapa</button>
+        <button role="tab" data-tab="departamentos" aria-controls="departamentos" aria-selected="false">Departamentos</button>
         <button role="tab" data-tab="calendario" aria-controls="calendario" aria-selected="false">Calendario</button>
         <button role="tab" data-tab="reportar" aria-controls="reportar" aria-selected="false">Reportar</button>
         <button role="tab" data-tab="bomberos" aria-controls="bomberos" aria-selected="false">Bomberos</button>
@@ -59,6 +60,9 @@
           <label class="chip"><input type="checkbox" id="fStations" checked><span><img class="g stn" data-logo alt="">Cuarteles de bomberos</span></label>
         </div>
         <div class="actions">
+          <select id="deptSelect" class="dept-select" aria-label="Ir directo a un departamento">
+            <option value="">Ir a departamento…</option>
+          </select>
           <button id="btnReload" class="btn primary">Actualizar</button>
           <button id="btnPY" class="btn">Ver Paraguay</button>
           <button id="btnLoc" class="btn">Mi ubicación</button>
@@ -77,6 +81,39 @@
       </div>
       <p class="note">Cada marca es una detección térmica de un satélite. Puede ser una quema agrícola, una fuente industrial o una falsa alarma. Los satélites pasan a ciertas horas y no vigilan de forma continua.</p>
       <p class="note">La animación muestra una llama en cada foco y una estela hacia donde el viento de ahora empujaría un posible fuego (viento de Open-Meteo, en cuadros de unos 50 km). Es solo la dirección y la fuerza del viento: no es un modelo de cómo se propaga un incendio.</p>
+    </section>
+
+    <!-- DEPARTAMENTOS -->
+    <section id="departamentos" class="panel" role="tabpanel">
+      <div class="head">
+        <div>
+          <h2>Departamentos</h2>
+          <p class="lede">Paraguay se divide en 17 departamentos y la capital, Asunción. Tocá uno en el mapa o en la lista para ir directo a él.</p>
+        </div>
+        <div class="toolbar tight">
+          <fieldset class="seg">
+            <legend>Ordenar</legend>
+            <label><input type="radio" name="deptSort" value="act" checked><span>Más focos</span></label>
+            <label><input type="radio" name="deptSort" value="num"><span>Por número</span></label>
+          </fieldset>
+        </div>
+      </div>
+      <p id="deptStatus" class="status" role="status" aria-live="polite">Cargando departamentos…</p>
+      <div class="dept-layout">
+        <div class="card pad dept-mapcard">
+          <div class="cal-top">
+            <h3 class="card-title">Paraguay por departamento</h3>
+            <div class="cal-scale" aria-hidden="true">
+              <span>Menos</span>
+              <i class="lv0"></i><i class="lv1"></i><i class="lv2"></i><i class="lv3"></i><i class="lv4"></i>
+              <span>Más focos</span>
+            </div>
+          </div>
+          <div id="deptMap" class="dept-map"></div>
+          <p class="note">Los números romanos son el número oficial de cada departamento. Al oeste del río Paraguay está el Chaco (XV, XVI y XVII).</p>
+        </div>
+        <div id="deptList" class="dept-list"></div>
+      </div>
     </section>
 
     <!-- CALENDARIO -->
@@ -167,6 +204,10 @@
             <input id="repContact" maxlength="80" autocomplete="tel">
             <small>Solo lo ve Bomberos.</small>
           </label>
+          <!-- Trampa para robots: oculto para las personas. Si viene lleno, el servidor descarta el reporte. -->
+          <div class="hp" aria-hidden="true">
+            <label>No completar este campo <input id="repWebsite" name="website" tabindex="-1" autocomplete="off"></label>
+          </div>
           <button type="submit" class="btn primary wide">Enviar reporte</button>
           <p id="repMsg" class="status" role="status" aria-live="polite"></p>
         </form>
@@ -219,6 +260,7 @@
         <ul>
           <li>Datos de detección: NASA FIRMS (MODIS y VIIRS).</li>
           <li>Mapas: © OpenStreetMap contributors e imágenes de Esri.</li>
+          <li>Límites de los departamentos: Dirección General de Estadística, Encuestas y Censos (DGEEC), vía <a href="https://www.geoboundaries.org/" target="_blank" rel="noopener">geoBoundaries</a> (CC BY 4.0), simplificados para la web.</li>
           <li>Viento actual de la animación del mapa: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</li>
           <li>Mapa interactivo: Leaflet.</li>
         </ul>
@@ -244,7 +286,7 @@
     <p>FIREGUARD usa datos de NASA FIRMS. Una detección satelital no confirma un incendio y esta web no reemplaza a los bomberos. Desarrollado con asistencia de IA.</p>
   </footer>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
   <script src="app.js"></script>
 </body>
 </html>
