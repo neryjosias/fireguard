@@ -54,6 +54,7 @@
           <label class="chip"><input type="checkbox" id="fMODIS" checked><span><i class="g ring"></i>MODIS</span></label>
           <label class="chip"><input type="checkbox" id="fVIIRS" checked><span><i class="g dot"></i>VIIRS</span></label>
           <label class="chip"><input type="checkbox" id="fHigh"><span>Solo confianza alta</span></label>
+          <label class="chip"><input type="checkbox" id="fAnim" checked><span><i class="g cone"></i>Animación del viento</span></label>
           <label class="chip"><input type="checkbox" id="fReports" checked><span><i class="g rep"></i>Reportes</span></label>
           <label class="chip"><input type="checkbox" id="fStations" checked><span><img class="g stn" data-logo alt="">Cuarteles de bomberos</span></label>
         </div>
@@ -75,6 +76,7 @@
         <div id="focusPanel" class="focus-panel" aria-live="polite"></div>
       </div>
       <p class="note">Cada marca es una detección térmica de un satélite. Puede ser una quema agrícola, una fuente industrial o una falsa alarma. Los satélites pasan a ciertas horas y no vigilan de forma continua.</p>
+      <p class="note">La animación muestra una llama en cada foco y una estela hacia donde el viento de ahora empujaría un posible fuego (viento de Open-Meteo, en cuadros de unos 50 km). Es solo la dirección y la fuerza del viento: no es un modelo de cómo se propaga un incendio.</p>
     </section>
 
     <!-- CALENDARIO -->
@@ -217,6 +219,7 @@
         <ul>
           <li>Datos de detección: NASA FIRMS (MODIS y VIIRS).</li>
           <li>Mapas: © OpenStreetMap contributors e imágenes de Esri.</li>
+          <li>Viento actual de la animación del mapa: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a> (CC BY 4.0).</li>
           <li>Mapa interactivo: Leaflet.</li>
         </ul>
         <h3>Resumen del área de cada foco</h3>
