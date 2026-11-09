@@ -1,32 +1,29 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"><!doctype html>
-<html lang="es">
-<head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Calendario armonizado de actividad de incendios en Paraguay, con detecciones reales de NASA FIRMS (MODIS y VIIRS).">
+  <meta name="theme-color" content="#07121a">
   <title>FIREGUARD · Actividad de incendios en Paraguay</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Public+Sans:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;600;700;800&family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230e5a48'/%3E%3Cpath fill='%23ff7a2f' d='M12.2 2.8c.6 3.3 4.4 5.1 4.4 9.5a4.6 4.6 0 0 1-9.2 0c0-1.9.9-3.1 1.9-4.1.2 1.2.7 2 1.5 2.3-.3-2.5.2-5.3 1.4-7.7Z'/%3E%3C/svg%3E">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%2307121a'/%3E%3Cpath fill='%23ff6b2c' d='M12.2 2.8c.6 3.3 4.4 5.1 4.4 9.5a4.6 4.6 0 0 1-9.2 0c0-1.9.9-3.1 1.9-4.1.2 1.2.7 2 1.5 2.3-.3-2.5.2-5.3 1.4-7.7Z'/%3E%3C/svg%3E">
 </head>
 <body>
   <a class="skip" href="#contenido">Ir al contenido</a>
 
-  <div class="notice" role="note">
-    Un foco satelital no es un incendio confirmado. Ante una emergencia llamá al <b>911</b> o a Bomberos (<b>132</b>).
-  </div>
-
   <header class="topbar">
     <div class="topbar-in">
       <a class="brand" href="/" aria-label="FIREGUARD, inicio">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.2 1.8c.6 3.6 5 5.6 5 10.4a5.2 5.2 0 0 1-10.4 0c0-2.1 1-3.5 2.2-4.6.2 1.3.8 2.2 1.7 2.6-.3-2.8.2-6 1.5-8.4Z"/></svg>
-        <span>FIREGUARD</span>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <defs><linearGradient id="flameGrad" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff3b2f"/><stop offset="1" stop-color="#ffb02e"/></linearGradient></defs>
+          <path fill="url(#flameGrad)" d="M12.2 1.8c.6 3.6 5 5.6 5 10.4a5.2 5.2 0 0 1-10.4 0c0-2.1 1-3.5 2.2-4.6.2 1.3.8 2.2 1.7 2.6-.3-2.8.2-6 1.5-8.4Z"/>
+        </svg>
+        <span>FIRE GUARD</span>
       </a>
       <nav id="tabs" role="tablist" aria-label="Secciones">
         <button role="tab" data-tab="mapa" aria-controls="mapa" aria-selected="true" class="active">Mapa</button>
@@ -37,6 +34,10 @@
       </nav>
     </div>
   </header>
+
+  <div class="notice" role="note">
+    Un foco satelital no es un incendio confirmado. Ante una emergencia llamá al <b>911</b> o a Bomberos (<b>132</b>).
+  </div>
 
   <main id="contenido">
     <!-- MAPA -->
@@ -53,8 +54,8 @@
           <label class="chip"><input type="checkbox" id="fMODIS" checked><span><i class="g ring"></i>MODIS</span></label>
           <label class="chip"><input type="checkbox" id="fVIIRS" checked><span><i class="g dot"></i>VIIRS</span></label>
           <label class="chip"><input type="checkbox" id="fHigh"><span>Solo confianza alta</span></label>
-          <label class="chip"><input type="checkbox" id="fReports" checked><span><i class="g rep"></i>Reportes ciudadanos</span></label>
-          <label class="chip"><input type="checkbox" id="fStations" checked><span><img class="g stn" src="img/cuartel.png" alt="">Cuarteles de bomberos</span></label>
+          <label class="chip"><input type="checkbox" id="fReports" checked><span><i class="g rep"></i>Reportes</span></label>
+          <label class="chip"><input type="checkbox" id="fStations" checked><span><img class="g stn" src="img/cuartel.png" alt="">Cuarteles</span></label>
         </div>
         <div class="actions">
           <button id="btnReload" class="btn primary">Actualizar</button>
@@ -63,9 +64,15 @@
         </div>
       </div>
       <p id="mapStatus" class="status" role="status" aria-live="polite">Consultando NASA FIRMS…</p>
-      <div class="mapbox">
-        <div id="map" aria-label="Mapa de detecciones térmicas en Paraguay"></div>
-        <button id="btnReportar" class="btn danger sos" type="button">Reportar emergencia</button>
+
+      <div class="dash">
+        <div class="mapcol">
+          <div class="mapbox card">
+            <div id="map" aria-label="Mapa de detecciones térmicas en Paraguay"></div>
+            <button id="btnReportar" class="btn danger sos" type="button">Reportar emergencia</button>
+          </div>
+        </div>
+        <div id="focusPanel" class="focus-panel" aria-live="polite"></div>
       </div>
       <p class="note">Cada marca es una detección térmica de un satélite. Puede ser una quema agrícola, una fuente industrial o una falsa alarma. Los satélites pasan a ciertas horas y no vigilan de forma continua.</p>
     </section>
@@ -88,7 +95,7 @@
       </div>
       <p id="calStatus" class="status" role="status" aria-live="polite">Abrí esta pestaña para cargar el análisis.</p>
 
-      <div class="calbox">
+      <div class="calbox card">
         <div class="cal-top">
           <h3 id="calMonth" class="cal-month">Actividad por día</h3>
           <div class="cal-scale" aria-hidden="true">
@@ -97,29 +104,34 @@
             <span>Más</span>
           </div>
         </div>
-        <p class="lede small">Cada casilla es un día. El número grande son las zonas con fuego detectado (una zona cuenta una vez aunque la vean los dos satélites). Cuanto más oscuro, más actividad. Tocá un día para ver el detalle.</p>
+        <p class="lede small">Cada casilla es un día. El número grande son las zonas con fuego detectado (una zona cuenta una vez aunque la vean los dos satélites). Cuanto más intenso el color, más actividad. Tocá un día para ver el detalle.</p>
         <div id="calGrid" class="cal-grid" role="group" aria-label="Calendario de actividad de incendios"></div>
         <div id="calDetail" class="cal-detail" aria-live="polite"></div>
       </div>
 
-      <h3>Comparación con años anteriores</h3>
-      <p class="lede small">Mismos días de años anteriores, medidos con MODIS y VIIRS S-NPP, los dos sensores con archivo histórico.</p>
-      <ul class="legend">
-        <li><i class="g sw now"></i>Este año</li>
-        <li><i class="g sw hist"></i>Promedio histórico</li>
-      </ul>
-      <div class="chartwrap" id="chartBase"></div>
+      <div class="two">
+        <div class="card pad">
+          <h3 class="card-title">Comparación con años anteriores</h3>
+          <p class="lede small">Mismos días de años anteriores, medidos con MODIS y VIIRS S-NPP, los dos sensores con archivo histórico.</p>
+          <ul class="legend">
+            <li><i class="g sw now"></i>Este año</li>
+            <li><i class="g sw hist"></i>Promedio histórico</li>
+          </ul>
+          <div class="chartwrap" id="chartBase"></div>
+        </div>
+        <div class="card pad">
+          <h3 class="card-title">Zonas con más actividad</h3>
+          <ul id="zones" class="rows"></ul>
+        </div>
+      </div>
 
-      <h3>Zonas con más actividad</h3>
-      <ul id="zones" class="rows"></ul>
-
-      <details>
+      <details class="card">
         <summary>Cómo se armonizan los datos</summary>
         <div id="method" class="prose"></div>
       </details>
 
-      <h3>Detalle por día</h3>
-      <div class="tablewrap"><table id="calTable"></table></div>
+      <h3 class="section-title">Detalle por día</h3>
+      <div class="tablewrap card"><table id="calTable"></table></div>
     </section>
 
     <!-- REPORTAR -->
@@ -132,11 +144,11 @@
       </div>
       <p class="warn">FIREGUARD no reemplaza a los bomberos ni a los servicios de emergencia. Si hay peligro inmediato, llamá al <b>911</b> o a Bomberos (<b>132</b>).</p>
       <div class="split">
-        <div>
+        <div class="card mapcard">
           <div id="pickmap" aria-label="Mapa para marcar la ubicación"></div>
-          <p class="note">Tocá el mapa para marcar el lugar, o usá tu ubicación.</p>
+          <p class="note pad-x">Tocá el mapa para marcar el lugar, o usá tu ubicación.</p>
         </div>
-        <form id="repForm" novalidate>
+        <form id="repForm" class="card pad" novalidate>
           <button type="button" id="btnPickLoc" class="btn">Usar mi ubicación</button>
           <p id="pickCoords" class="status">Ubicación sin marcar.</p>
           <label class="field">
@@ -161,7 +173,8 @@
 
     <!-- BOMBEROS -->
     <section id="bomberos" class="panel" role="tabpanel">
-      <div id="loginBox" class="login">
+      <div id="loginBox" class="login card pad">
+        <img class="login-logo" src="img/cuartel.png" alt="">
         <h2>Panel de Bomberos</h2>
         <p class="lede">Acceso solo para personal autorizado.</p>
         <label class="field">
@@ -182,22 +195,22 @@
             <button id="btnLogout" class="btn">Salir</button>
           </div>
         </div>
-        <h3>Alertas</h3>
+        <h3 class="section-title">Alertas</h3>
         <p class="lede small">Reportes abiertos con una detección satelital a 5 km o menos en los últimos 3 días. Sirven para priorizar, no confirman un incendio.</p>
         <div id="alerts" class="stack"></div>
-        <h3>Reportes</h3>
+        <h3 class="section-title">Reportes</h3>
         <div id="adminReports" class="stack"></div>
       </div>
     </section>
 
     <!-- ACERCA -->
     <section id="acerca" class="panel" role="tabpanel">
-      <div class="prose article">
+      <div class="prose article card pad">
         <h2>Acerca de FIREGUARD</h2>
         <h3>El problema</h3>
         <p>MODIS y VIIRS son dos sensores satelitales de la NASA que detectan puntos de calor. Tienen resoluciones, horarios y escalas de confianza distintas. Mirarlos por separado hace difícil ver cuándo sube de verdad la actividad de incendios.</p>
         <h3>La solución</h3>
-        <p>FIREGUARD los une en un calendario diario sin contar dos veces la misma zona, y compara cada día con los mismos días de años anteriores para marcar anomalías. También permite que cualquier persona reporte humo o fuego para que Bomberos lo revise.</p>
+        <p>FIREGUARD los une en un calendario diario sin contar dos veces la misma zona, y compara cada día con los mismos días de años anteriores. También permite que cualquier persona reporte humo o fuego para que Bomberos lo revise.</p>
         <h3>Para qué sirve</h3>
         <p>Para ver rápido dónde y cuándo se concentra la actividad, como apoyo a quienes toman decisiones en emergencias. No confirma incendios y no reemplaza a los bomberos.</p>
         <h3>Fuentes y créditos</h3>
@@ -216,230 +229,7 @@
           <li>Elevación y pendiente: USGS SRTM.</li>
           <li>Vegetación y degradación del suelo: Copernicus Sentinel-2. Cambios en la superficie: Copernicus Sentinel-1 (radar). Cobertura del terreno: ESA WorldCover.</li>
         </ul>
-        <p>Contiene datos modificados de Copernicus Sentinel. Cada dato muestra su fecha y su fuente en la sección "Datos por fuente" del foco. El "potencial de propagación" es una estimación orientativa con reglas simples del proyecto, no un modelo validado de comportamiento del fuego, y no confirma que haya un incendio. Sentinel-1 no mide deformación del terreno: se usa para ver cambios en la superficie.</p>
-        <p>FIREGUARD es un proyecto independiente. NASA no lo creó ni lo respalda.</p>
-        <h3>Uso de IA</h3>
-        <p>El código de este proyecto se escribió con asistencia de IA (Claude, de Anthropic). Los datos que se muestran son reales y vienen de NASA FIRMS. No se inventan ni se simulan.</p>
-      </div>
-    </section>
-  </main>
-
-  <footer>
-    <p>FIREGUARD usa datos de NASA FIRMS. Una detección satelital no confirma un incendio y esta web no reemplaza a los bomberos. Desarrollado con asistencia de IA.</p>
-  </footer>
-
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="app.js"></script>
-</body>
-</html>
-
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Calendario armonizado de actividad de incendios en Paraguay, con detecciones reales de NASA FIRMS (MODIS y VIIRS).">
-  <title>FIREGUARD · Actividad de incendios en Paraguay</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Public+Sans:wght@400;500;600&display=swap">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="style.css">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='6' fill='%230e5a48'/%3E%3Cpath fill='%23ff7a2f' d='M12.2 2.8c.6 3.3 4.4 5.1 4.4 9.5a4.6 4.6 0 0 1-9.2 0c0-1.9.9-3.1 1.9-4.1.2 1.2.7 2 1.5 2.3-.3-2.5.2-5.3 1.4-7.7Z'/%3E%3C/svg%3E">
-</head>
-<body>
-  <a class="skip" href="#contenido">Ir al contenido</a>
-
-  <div class="notice" role="note">
-    Un foco satelital no es un incendio confirmado. Ante una emergencia llamá al <b>911</b> o a Bomberos (<b>132</b>).
-  </div>
-
-  <header class="topbar">
-    <div class="topbar-in">
-      <a class="brand" href="/" aria-label="FIREGUARD, inicio">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.2 1.8c.6 3.6 5 5.6 5 10.4a5.2 5.2 0 0 1-10.4 0c0-2.1 1-3.5 2.2-4.6.2 1.3.8 2.2 1.7 2.6-.3-2.8.2-6 1.5-8.4Z"/></svg>
-        <span>FIREGUARD</span>
-      </a>
-      <nav id="tabs" role="tablist" aria-label="Secciones">
-        <button role="tab" data-tab="mapa" aria-controls="mapa" aria-selected="true" class="active">Mapa</button>
-        <button role="tab" data-tab="calendario" aria-controls="calendario" aria-selected="false">Calendario</button>
-        <button role="tab" data-tab="reportar" aria-controls="reportar" aria-selected="false">Reportar</button>
-        <button role="tab" data-tab="bomberos" aria-controls="bomberos" aria-selected="false">Bomberos</button>
-        <button role="tab" data-tab="acerca" aria-controls="acerca" aria-selected="false">Acerca de</button>
-      </nav>
-    </div>
-  </header>
-
-  <main id="contenido">
-    <!-- MAPA -->
-    <section id="mapa" class="panel active" role="tabpanel">
-      <div class="toolbar">
-        <fieldset class="seg">
-          <legend>Período</legend>
-          <label><input type="radio" name="days" value="1"><span>1 día</span></label>
-          <label><input type="radio" name="days" value="2" checked><span>2 días</span></label>
-          <label><input type="radio" name="days" value="3"><span>3 días</span></label>
-          <label><input type="radio" name="days" value="5"><span>5 días</span></label>
-        </fieldset>
-        <div class="chips">
-          <label class="chip"><input type="checkbox" id="fMODIS" checked><span><i class="g ring"></i>MODIS</span></label>
-          <label class="chip"><input type="checkbox" id="fVIIRS" checked><span><i class="g dot"></i>VIIRS</span></label>
-          <label class="chip"><input type="checkbox" id="fHigh"><span>Solo confianza alta</span></label>
-          <label class="chip"><input type="checkbox" id="fReports" checked><span><i class="g rep"></i>Reportes ciudadanos</span></label>
-          <label class="chip"><input type="checkbox" id="fStations" checked><span><i class="g stn"></i>Cuarteles de bomberos</span></label>
-        </div>
-        <div class="actions">
-          <button id="btnReload" class="btn primary">Actualizar</button>
-          <button id="btnPY" class="btn">Ver Paraguay</button>
-          <button id="btnLoc" class="btn">Mi ubicación</button>
-        </div>
-      </div>
-      <p id="mapStatus" class="status" role="status" aria-live="polite">Consultando NASA FIRMS…</p>
-      <div class="mapbox">
-        <div id="map" aria-label="Mapa de detecciones térmicas en Paraguay"></div>
-        <button id="btnReportar" class="btn danger sos" type="button">Reportar emergencia</button>
-      </div>
-      <p class="note">Cada marca es una detección térmica de un satélite. Puede ser una quema agrícola, una fuente industrial o una falsa alarma. Los satélites pasan a ciertas horas y no vigilan de forma continua.</p>
-    </section>
-
-    <!-- CALENDARIO -->
-    <section id="calendario" class="panel" role="tabpanel">
-      <div class="head">
-        <div>
-          <h2>Calendario de actividad</h2>
-          <p class="lede">MODIS y VIIRS unidos en un solo registro diario. Una zona cuenta una vez aunque la vean los dos sensores.</p>
-        </div>
-        <div class="toolbar tight">
-          <fieldset class="seg">
-            <legend>Ventana</legend>
-            <label><input type="radio" name="calDays" value="7"><span>7 días</span></label>
-            <label><input type="radio" name="calDays" value="10" checked><span>10 días</span></label>
-          </fieldset>
-          <button id="btnCal" class="btn primary">Actualizar</button>
-        </div>
-      </div>
-      <p id="calStatus" class="status" role="status" aria-live="polite">Abrí esta pestaña para cargar el análisis.</p>
-
-      <h3>Detecciones por día</h3>
-      <ul class="legend">
-        <li><i class="g ring"></i>MODIS</li>
-        <li><i class="g dot"></i>VIIRS</li>
-        <li><i class="g sw uni"></i>Zonas únicas, sin repetir</li>
-      </ul>
-      <div class="chartwrap" id="chartMain"></div>
-
-      <h3>Comparación con años anteriores</h3>
-      <p class="lede small">Mismos días de años anteriores, medidos con MODIS y VIIRS S-NPP, los dos sensores con archivo histórico. Un día se marca como anomalía si duplica ese promedio o se aleja mucho del resto de la ventana.</p>
-      <ul class="legend">
-        <li><i class="g sw now"></i>Este año</li>
-        <li><i class="g sw hist"></i>Promedio histórico</li>
-        <li><i class="g sw flag"></i>Anomalía</li>
-      </ul>
-      <div class="chartwrap" id="chartBase"></div>
-
-      <h3>Zonas con más actividad</h3>
-      <ul id="zones" class="rows"></ul>
-
-      <details>
-        <summary>Cómo se armonizan los datos</summary>
-        <div id="method" class="prose"></div>
-      </details>
-
-      <h3>Detalle por día</h3>
-      <div class="tablewrap"><table id="calTable"></table></div>
-    </section>
-
-    <!-- REPORTAR -->
-    <section id="reportar" class="panel" role="tabpanel">
-      <div class="head">
-        <div>
-          <h2>Reportar humo o fuego</h2>
-          <p class="lede">Marcá el lugar en el mapa y contá qué viste. Bomberos revisa cada reporte.</p>
-        </div>
-      </div>
-      <p class="warn">FIREGUARD no reemplaza a los bomberos ni a los servicios de emergencia. Si hay peligro inmediato, llamá al <b>911</b> o a Bomberos (<b>132</b>).</p>
-      <div class="split">
-        <div>
-          <div id="pickmap" aria-label="Mapa para marcar la ubicación"></div>
-          <p class="note">Tocá el mapa para marcar el lugar, o usá tu ubicación.</p>
-        </div>
-        <form id="repForm" novalidate>
-          <button type="button" id="btnPickLoc" class="btn">Usar mi ubicación</button>
-          <p id="pickCoords" class="status">Ubicación sin marcar.</p>
-          <label class="field">
-            <span>Qué viste</span>
-            <textarea id="repDesc" maxlength="500" required minlength="10" placeholder="Humo espeso al costado de la ruta, cerca del arroyo"></textarea>
-            <small>Mínimo 10 caracteres.</small>
-          </label>
-          <label class="field">
-            <span>Tu nombre (opcional)</span>
-            <input id="repName" maxlength="80" autocomplete="name">
-          </label>
-          <label class="field">
-            <span>Teléfono o contacto (opcional)</span>
-            <input id="repContact" maxlength="80" autocomplete="tel">
-            <small>Solo lo ve Bomberos.</small>
-          </label>
-          <button type="submit" class="btn primary wide">Enviar reporte</button>
-          <p id="repMsg" class="status" role="status" aria-live="polite"></p>
-        </form>
-      </div>
-    </section>
-
-    <!-- BOMBEROS -->
-    <section id="bomberos" class="panel" role="tabpanel">
-      <div id="loginBox" class="login">
-        <h2>Panel de Bomberos</h2>
-        <p class="lede">Acceso solo para personal autorizado.</p>
-        <label class="field">
-          <span>Token de acceso</span>
-          <input type="password" id="tokenInput" autocomplete="off">
-        </label>
-        <button id="btnLogin" class="btn primary wide">Entrar</button>
-        <p id="loginMsg" class="status" role="alert"></p>
-      </div>
-      <div id="adminBox" hidden>
-        <div class="head">
-          <div>
-            <h2>Panel de Bomberos</h2>
-            <p class="lede">Revisá reportes y priorizá con las alertas satelitales.</p>
-          </div>
-          <div class="toolbar tight">
-            <button id="btnAdminReload" class="btn primary">Actualizar</button>
-            <button id="btnLogout" class="btn">Salir</button>
-          </div>
-        </div>
-        <h3>Alertas</h3>
-        <p class="lede small">Reportes abiertos con una detección satelital a 5 km o menos en los últimos 3 días. Sirven para priorizar, no confirman un incendio.</p>
-        <div id="alerts" class="stack"></div>
-        <h3>Reportes</h3>
-        <div id="adminReports" class="stack"></div>
-      </div>
-    </section>
-
-    <!-- ACERCA -->
-    <section id="acerca" class="panel" role="tabpanel">
-      <div class="prose article">
-        <h2>Acerca de FIREGUARD</h2>
-        <h3>El problema</h3>
-        <p>MODIS y VIIRS son dos sensores satelitales de la NASA que detectan puntos de calor. Tienen resoluciones, horarios y escalas de confianza distintas. Mirarlos por separado hace difícil ver cuándo sube de verdad la actividad de incendios.</p>
-        <h3>La solución</h3>
-        <p>FIREGUARD los une en un calendario diario sin contar dos veces la misma zona, y compara cada día con los mismos días de años anteriores para marcar anomalías. También permite que cualquier persona reporte humo o fuego para que Bomberos lo revise.</p>
-        <h3>Para qué sirve</h3>
-        <p>Para ver rápido dónde y cuándo se concentra la actividad, como apoyo a quienes toman decisiones en emergencias. No confirma incendios y no reemplaza a los bomberos.</p>
-        <h3>Fuentes y créditos</h3>
-        <ul>
-          <li>Datos de detección: NASA FIRMS (MODIS y VIIRS).</li>
-          <li>Mapas: © OpenStreetMap contributors e imágenes de Esri.</li>
-          <li>Mapa interactivo: Leaflet.</li>
-        </ul>
-        <h3>Resumen del área de cada foco</h3>
-        <p>Al abrir un foco en el mapa, FIREGUARD consulta datos ambientales del lugar y los resume en lenguaje simple. Los datos se leen a través de Google Earth Engine:</p>
-        <ul>
-          <li>Humedad superficial y de raíces del suelo: NASA SMAP L4 (SPL4SMGP).</li>
-          <li>Precipitación: NASA GPM IMERG V07 y CHIRPS diario (UCSB Climate Hazards Center).</li>
-          <li>Tipo de suelo (arcilla y limo): ISRIC SoilGrids.</li>
-          <li>Viento, temperatura y humedad del aire: ECMWF ERA5-Land (Copernicus Climate Change Service).</li>
-          <li>Elevación y pendiente: USGS SRTM.</li>
-          <li>Vegetación y degradación del suelo: Copernicus Sentinel-2. Cambios en la superficie: Copernicus Sentinel-1 (radar). Cobertura del terreno: ESA WorldCover.</li>
-        </ul>
-        <p>Contiene datos modificados de Copernicus Sentinel. Cada dato muestra su fecha y su fuente en la sección "Datos por fuente" del foco. El "potencial de propagación" es una estimación orientativa con reglas simples del proyecto, no un modelo validado de comportamiento del fuego, y no confirma que haya un incendio. Sentinel-1 no mide deformación del terreno: se usa para ver cambios en la superficie.</p>
+        <p>Contiene datos modificados de Copernicus Sentinel. Cada dato muestra su fecha y su fuente en la sección "Datos avanzados" del foco. El "potencial de propagación" es una estimación orientativa con reglas simples del proyecto, no un modelo validado de comportamiento del fuego, y no confirma que haya un incendio. Sentinel-1 no mide deformación del terreno: se usa para ver cambios en la superficie.</p>
         <p>FIREGUARD es un proyecto independiente. NASA no lo creó ni lo respalda.</p>
         <h3>Uso de IA</h3>
         <p>El código de este proyecto se escribió con asistencia de IA (Claude, de Anthropic). Los datos que se muestran son reales y vienen de NASA FIRMS. No se inventan ni se simulan.</p>
