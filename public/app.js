@@ -67,7 +67,9 @@ const esri = () => L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/serv
 const map = L.map('map', { preferCanvas: true, zoomSnap: 0.25 }).fitBounds(PY_BOUNDS);
 const baseDark = dark().addTo(map);
 L.control.layers({ Oscuro: baseDark, Calles: osm(), Satélite: esri() }).addTo(map);
-const fireRenderer = L.canvas({ padding: 0.5 });
+// En pantallas táctiles el dedo es impreciso: se agranda el área de toque de cada foco (tolerance, en píxeles)
+const TOUCH = window.matchMedia('(pointer: coarse)').matches;
+const fireRenderer = L.canvas({ padding: 0.5, tolerance: TOUCH ? 9 : 2 });
 const fireLayer = L.layerGroup().addTo(map);
 const reportLayer = L.layerGroup().addTo(map);
 const stationLayer = L.layerGroup().addTo(map);
@@ -79,13 +81,20 @@ let selected = null;
 let selMarker = null;
 
 const legend = L.control({ position: 'bottomleft' });
-legend.onAdd = () => el('div', { class: 'map-legend' },
-  el('div', {}, el('i', { class: 'g ring' }), 'MODIS'),
-  el('div', {}, el('i', { class: 'g dot' }), 'VIIRS'),
-  el('div', {}, el('i', { class: 'g cone' }), 'Hacia dónde lo llevaría el viento'),
-  el('div', {}, el('i', { class: 'g rep' }), 'Reporte ciudadano'),
-  el('div', {}, el('img', { class: 'g stn', src: STATION_ICON, alt: '' }), 'Cuartel de bomberos'),
-  el('div', {}, 'Más grande = más potencia'));
+// Leyenda plegable: en celular empieza cerrada para no tapar focos (antes tapaba ~1 de cada 5 toques)
+legend.onAdd = () => {
+  const box = el('details', { class: 'map-legend' },
+    el('summary', {}, 'Leyenda'),
+    el('div', {}, el('i', { class: 'g ring' }), 'MODIS'),
+    el('div', {}, el('i', { class: 'g dot' }), 'VIIRS'),
+    el('div', {}, el('i', { class: 'g cone' }), 'Hacia dónde lo llevaría el viento'),
+    el('div', {}, el('i', { class: 'g rep' }), 'Reporte ciudadano'),
+    el('div', {}, el('img', { class: 'g stn', src: STATION_ICON, alt: '' }), 'Cuartel de bomberos'),
+    el('div', {}, 'Más grande = más potencia'));
+  box.open = !isMobile();
+  L.DomEvent.disableClickPropagation(box);
+  return box;
+};
 legend.addTo(map);
 
 // ---------- Cuarteles de bomberos (archivo estático public/bomberos.json) ----------
@@ -103,7 +112,7 @@ async function loadStations() {
     stations = await api('/bomberos.json');
     for (const s of stations) {
       s.marker = L.marker([s.lat, s.lon], {
-        icon: L.icon({ iconUrl: STATION_ICON, className: 'stn-pin', iconSize: [24, 24], iconAnchor: [12, 12], popupAnchor: [0, -12] }),
+        icon: L.icon({ iconUrl: STATION_ICON, className: 'stn-pin', iconSize: TOUCH ? [20, 20] : [24, 24], iconAnchor: TOUCH ? [10, 10] : [12, 12], popupAnchor: [0, -11] }),
         zIndexOffset: -500, title: stationName(s),
       }).bindPopup(el('div', {}, el('b', {}, 'Cuartel de bomberos'), el('br'), stationName(s), el('br'),
         el('small', {}, `${s.b ? s.b + ', ' : ''}${s.d} (${s.p}). Emergencias: 911 / Bomberos 132.`))).addTo(stationLayer);
@@ -139,15 +148,26 @@ function drawFires() {
   fireLayer.clearLayers();
   const m = $('#fMODIS').checked, v = $('#fVIIRS').checked, hi = $('#fHigh').checked;
   visible = fires.filter((p) => !((p.sensor === 'MODIS' && !m) || (p.sensor === 'VIIRS' && !v) || (hi && p.conf !== 'high')));
+  animOrder = [...visible].sort((a, b) => b.frp - a.frp); // la animación prioriza los focos más potentes
+  const lightMode = TOUCH && visible.length > 800;
   for (const p of visible) {
     const r = Math.min(9, 3 + Math.sqrt(p.frp) / 2);
     const col = p.sensor === 'MODIS' ? COLOR.modis : COLOR.viirs;
-    // Halo suave (no recibe clics) + núcleo
-    L.circleMarker([p.lat, p.lon], { renderer: fireRenderer, radius: r * 2.4, stroke: false, fillColor: col, fillOpacity: 0.16, interactive: false }).addTo(fireLayer);
+    // Halo suave (no recibe clics) + núcleo. En celular con muchos focos se omite el halo: la mitad de trabajo al mover el mapa.
+    if (!lightMode) L.circleMarker([p.lat, p.lon], { renderer: fireRenderer, radius: r * 2.4, stroke: false, fillColor: col, fillOpacity: 0.16, interactive: false }).addTo(fireLayer);
     const core = p.sensor === 'MODIS'
       ? L.circleMarker([p.lat, p.lon], { renderer: fireRenderer, radius: r + 1.5, color: COLOR.modis, weight: 2, fillColor: COLOR.modis, fillOpacity: 0.15 })
       : L.circleMarker([p.lat, p.lon], { renderer: fireRenderer, radius: r, color: '#ffb199', weight: 1, fillColor: COLOR.viirs, fillOpacity: 0.85 });
-    core.on('click', (ev) => { L.DomEvent.stopPropagation(ev); openFocus(p); });
+    core.on('click', (ev) => {
+      L.DomEvent.stopPropagation(ev);
+      // Celular con el mapa alejado: si bajo el dedo hay un montón de focos, primero se acerca la zona
+      if (TOUCH && map.getZoom() < 9) {
+        const c = ev.containerPoint;
+        const near = visible.filter((q) => map.latLngToContainerPoint([q.lat, q.lon]).distanceTo(c) < 14).length;
+        if (near > 3) { map.setView(ev.latlng, Math.min(map.getZoom() + 2.5, 10)); return; }
+      }
+      openFocus(p);
+    });
     core.addTo(fireLayer);
   }
   setStatus($('#mapStatus'), `${$('#mapStatus').dataset.base || ''} ${visible.length} de ${fires.length} detecciones visibles.`);
@@ -203,7 +223,10 @@ const animCanvas = el('canvas', { class: 'fire-anim', 'aria-hidden': 'true' });
 map.getContainer().append(animCanvas);
 const actx = animCanvas.getContext('2d');
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
-let dpr = 1, animRaf = 0, lastFrame = 0;
+let dpr = 1, animRaf = 0, lastFrame = 0, frameGap = 33, pausedUntil = 0, animOrder = [];
+// Presupuesto: cuántos focos se animan a la vez (los más potentes que estén a la vista).
+// Los demás siguen en el mapa como puntos y se pueden tocar igual.
+const ANIM_MAX = TOUCH ? 180 : 700;
 
 // Dibujos base: se generan una vez y después solo se copian, rotados y escalados
 function sprite(w, h, draw) { const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h); return c; }
@@ -246,12 +269,18 @@ function drawAnim(t) {
   if (!$('#fAnim').checked) return;
   const size = map.getSize();
   const zf = Math.min(2.4, Math.max(0.55, 2 ** ((map.getZoom() - 7) * 0.6)));
-  const dense = visible.length > 400 && map.getZoom() < 7;
+  const zoom = map.getZoom();
+  const dense = visible.length > 400 && zoom < 7;
+  // Posiciones: se proyectan una vez por nivel de zoom y en cada cuadro solo se suma el desplazamiento del mapa
+  const off = map.containerPointToLayerPoint([0, 0]);
+  const po = map.getPixelOrigin(), key = `${zoom}|${po.x}|${po.y}`; // cambia con el zoom o si el mapa salta lejos
   const pts = [];
-  for (const p of visible) {
-    const pt = map.latLngToContainerPoint([p.lat, p.lon]);
+  for (const p of animOrder) {
+    if (p._z !== key) { p._lp = map.latLngToLayerPoint([p.lat, p.lon]); p._z = key; }
+    const pt = { x: p._lp.x - off.x, y: p._lp.y - off.y };
     if (pt.x < -120 || pt.y < -120 || pt.x > size.x + 120 || pt.y > size.y + 120) continue;
     pts.push([p, pt, p.seed ??= seedOf(p)]);
+    if (pts.length >= ANIM_MAX) break;
   }
   // 1) Estela del viento y brasas que avanzan en esa dirección
   for (const [p, pt, seed] of pts) {
@@ -293,10 +322,18 @@ function drawAnim(t) {
 }
 function animLoop(ts) {
   animRaf = requestAnimationFrame(animLoop);
-  if (ts - lastFrame < 33) return; // ~30 cuadros por segundo alcanzan y ahorran batería
+  // Mientras el dedo toca la pantalla no se dibuja: el toque sobre el foco se atiende al instante
+  if (ts < pausedUntil || ts - lastFrame < frameGap) return;
   lastFrame = ts;
+  const c0 = performance.now();
   drawAnim(ts / 1000);
+  // Ritmo adaptable: si un cuadro tarda mucho (celular lento), se dibuja menos seguido (de 30 a ~8 por segundo)
+  frameGap = Math.min(120, Math.max(33, (performance.now() - c0) * 4));
 }
+map.getContainer().addEventListener('touchstart', () => { pausedUntil = Infinity; }, { passive: true });
+const resumeAnim = () => { pausedUntil = performance.now() + 350; };
+map.getContainer().addEventListener('touchend', resumeAnim, { passive: true });
+map.getContainer().addEventListener('touchcancel', resumeAnim, { passive: true });
 function updateAnim(redraw = false) {
   const on = $('#fAnim').checked && $('#mapa').classList.contains('active') && !document.hidden;
   if (on && !reducedMotion.matches) { if (!animRaf) animRaf = requestAnimationFrame(animLoop); return; }
@@ -306,6 +343,9 @@ function updateAnim(redraw = false) {
 sizeAnim();
 map.on('resize', () => { sizeAnim(); updateAnim(true); });
 map.on('zoomstart', () => { animCanvas.style.opacity = '0'; });
+// Al arrastrar con el dedo la animación está en pausa: se oculta y se redibuja al soltar
+map.on('dragstart', () => { if (!animRaf || pausedUntil > performance.now()) animCanvas.style.opacity = '0'; });
+map.on('dragend', () => { animCanvas.style.opacity = ''; drawAnim(performance.now() / 1000); });
 map.on('zoomend', () => { animCanvas.style.opacity = ''; updateAnim(true); });
 map.on('moveend', () => { if (!animRaf) updateAnim(true); });
 $('#fAnim').addEventListener('change', () => updateAnim(true));
@@ -469,7 +509,8 @@ function openFocus(p, pan = false) {
   panel.replaceChildren(head,
     el('div', { class: 'card fp-card fp-tall skel' }, el('p', { class: 'status loading' }, 'Analizando el área con datos de NASA, Copernicus y ECMWF. Puede tardar hasta un minuto.'), el('div', { class: 'bone big' })),
     skel('', '1. Viento'), skel('', '2. Aire'), skel('', '3. Suelo'), skel('', '4. Lluvia'), stationsCard);
-  if (isMobile()) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // El análisis está debajo del mapa (en computadora y en celular): se baja hasta él
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   const key = `${p.lat},${p.lon}`;
   if (!focusCache.has(key)) focusCache.set(key, api(`/api/focus?lat=${p.lat}&lon=${p.lon}`).catch((e) => { focusCache.delete(key); throw e; }));
@@ -493,6 +534,7 @@ function focusHeader(p) {
       el('span', {}, `${ddmm(p.date)} ${hh} UTC`), el('span', {}, `Confianza ${CONF[p.conf]}`),
       el('span', {}, `${fmtN(p.frp, p.frp < 10 ? 1 : 0)} MW`), el('span', {}, p.sat), el('span', {}, `${p.lat.toFixed(4)}, ${p.lon.toFixed(4)}`),
       windNowChip(p)),
+    el('button', { class: 'btn link to-map', type: 'button', onclick: () => $('.mapbox').scrollIntoView({ behavior: 'smooth', block: 'center' }) }, '↑ Ver en el mapa'),
     el('button', { class: 'x', type: 'button', 'aria-label': 'Cerrar el análisis del foco', onclick: closeFocus }, '×'),
     el('p', { class: 'fhead-note' }, 'Un foco satelital no confirma un incendio.')));
 }
