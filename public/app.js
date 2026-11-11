@@ -416,7 +416,8 @@ function renderOverview() {
   const reps = dep ? reportsList.filter((r) => deptOf(r.lat, r.lon)?.id === dep.id).length : reportsCount;
   const kpi = (label, value, cls = '', glyph = null) => el('div', { class: 'card kpi ' + cls }, el('span', {}, glyph, label), el('b', {}, value));
   const top = [...base].sort((a, b) => b.frp - a.frp).slice(0, 6);
-  panel.replaceChildren(
+  // .filter(Boolean): sin departamento elegido, la tarjeta del departamento no existe (si no, aparecería el texto "null")
+  panel.replaceChildren(...[
     dep ? card('fp-full dept-head', el('div', { class: 'fhead' },
       el('h3', {}, dep.name),
       el('p', { class: 'facts' },
@@ -441,7 +442,7 @@ function renderOverview() {
           el('span', { class: 'where' }, `${p.sensor} · ${ddmm(p.date)} ${p.time.slice(0, 2)}:${p.time.slice(2)} UTC`,
             el('small', {}, n ? `Cuartel más cercano: ${n.s.d} (${n.s.p}), a ${fmtKm(n.km)} km` : `${p.lat.toFixed(3)}, ${p.lon.toFixed(3)}`)),
           el('span', { class: 'frp' }, `${fmtN(p.frp)} MW`)));
-      })) : el('p', { class: 'fp-empty' }, !fires.length ? 'Cargando detecciones…' : dep ? `No hay focos en ${dep.name} con estos filtros.` : 'Ningún foco coincide con los filtros.')));
+      })) : el('p', { class: 'fp-empty' }, !fires.length ? 'Cargando detecciones…' : dep ? `No hay focos en ${dep.name} con estos filtros.` : 'Ningún foco coincide con los filtros.'))].filter(Boolean));
 }
 
 function closeFocus() {
