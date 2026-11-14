@@ -258,13 +258,6 @@ async function createStore() {
           [id, status, JSON.stringify([entry])]);
         return rows[0] ? rowToReport(rows[0]) : null;
       },
-      // Solo borra reportes ya cerrados (atendido o descartado). Devuelve 'deleted', 'open' o 'missing'.
-      async remove(id) {
-        const del = await pool.query('DELETE FROM reports WHERE id = $1 AND status = ANY($2::text[]) RETURNING id', [id, ['atendido', 'descartado']]);
-        if (del.rows.length) return 'deleted';
-        const ex = await pool.query('SELECT 1 FROM reports WHERE id = $1', [id]);
-        return ex.rows.length ? 'open' : 'missing';
-      },
     };
   }
 
@@ -286,13 +279,6 @@ async function createStore() {
       if (!r) return null;
       r.status = status; r.history.push(entry); save();
       return r;
-    },
-    async remove(id) {
-      const i = list.findIndex((x) => x.id === id);
-      if (i < 0) return 'missing';
-      if (list[i].status !== 'atendido' && list[i].status !== 'descartado') return 'open';
-      list.splice(i, 1); save();
-      return 'deleted';
     },
   };
 }
@@ -448,16 +434,6 @@ app.patch('/api/admin/reports/:id', admin, dbwrap(async (req, res) => {
   const r = await store.setStatus(id, status, entry);
   if (!r) return res.status(404).json({ error: 'Reporte no encontrado.' });
   res.json(r);
-}));
-
-// Eliminar un reporte: solo si ya está atendido o descartado (los abiertos no se pueden borrar)
-app.delete('/api/admin/reports/:id', admin, dbwrap(async (req, res) => {
-  const id = String(req.params.id);
-  if (!/^[0-9a-f]{8}$/.test(id)) return res.status(404).json({ error: 'Reporte no encontrado.' });
-  const result = await store.remove(id);
-  if (result === 'missing') return res.status(404).json({ error: 'Reporte no encontrado.' });
-  if (result === 'open') return res.status(409).json({ error: 'Solo se pueden eliminar reportes atendidos o descartados.' });
-  res.json({ ok: true });
 }));
 
 // Alertas: reportes abiertos con una detección satelital cerca (≤5 km, últimos 3 días).
