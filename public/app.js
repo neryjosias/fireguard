@@ -362,6 +362,49 @@ $('#btnLoc').addEventListener('click', () => {
   navigator.geolocation.getCurrentPosition((p) => map.setView([p.coords.latitude, p.coords.longitude], 11), () => alert('No se pudo obtener tu ubicación. Revisá el permiso del navegador.'));
 });
 
+// ---------- Reportes ciudadanos: marcador morado + ventana de detalle ----------
+const repIcon = L.divIcon({ className: 'rep-pin', iconSize: [26, 26], iconAnchor: [13, 13] });
+const REP_STATUS = { pendiente: 'Pendiente de revisión', verificado: 'Verificado por Bomberos', atendido: 'Atendido', descartado: 'Descartado' };
+let repModal = null, repLastFocus = null;
+
+function repKey(e) { if (e.key === 'Escape') closeReport(); }
+function closeReport() {
+  if (!repModal) return;
+  repModal.remove(); repModal = null;
+  document.removeEventListener('keydown', repKey);
+  if (repLastFocus && repLastFocus.focus) repLastFocus.focus();
+}
+function openReport(r) {
+  closeReport();
+  repLastFocus = document.activeElement;
+  const status = r.status || 'pendiente';
+  const field = (label, value) => el('div', { class: 'rm-field' }, el('span', {}, label), el('p', {}, value || '—'));
+  // El contacto es privado: solo se ve con la sesión de Bomberos iniciada
+  const contactP = el('p', {}, token ? 'Cargando…' : 'Solo lo ve Bomberos');
+  if (token) {
+    adminApi('/api/admin/reports')
+      .then((list) => { const m = list.find((x) => String(x.id) === String(r.id)); contactP.textContent = m && m.contact ? m.contact : 'No indicó'; })
+      .catch(() => { contactP.textContent = 'Solo lo ve Bomberos'; });
+  }
+  const closeBtn = el('button', { class: 'rm-x', type: 'button', 'aria-label': 'Cerrar', onclick: closeReport }, '×');
+  const dialog = el('div', { class: 'rm', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'rmTitle' },
+    el('header', { class: 'rm-head' },
+      el('div', {}, el('small', {}, 'Reporte ciudadano'), el('h3', { id: 'rmTitle' }, 'Detalle del reporte')),
+      closeBtn),
+    el('div', { class: 'rm-body' },
+      el('span', { class: 'rm-pill ' + status }, REP_STATUS[status] || status),
+      el('div', { class: 'rm-field' }, el('span', { class: 'rm-lbl' }, 'Descripción'), el('p', { class: 'rm-desc' }, r.description)),
+      el('div', { class: 'rm-grid' }, field('Nombre', r.name), field('Fecha y hora', r.createdAt ? fmtDateTime(r.createdAt) : null)),
+      el('div', { class: 'rm-field' }, el('span', {}, 'Contacto'), contactP)),
+    el('footer', { class: 'rm-foot' },
+      el('span', {}, 'Código: ' + r.id),
+      el('button', { class: 'rm-btn', type: 'button', onclick: closeReport }, 'Volver al mapa')));
+  repModal = el('div', { class: 'rm-overlay', onclick: (e) => { if (e.target === e.currentTarget) closeReport(); } }, dialog);
+  document.body.append(repModal);
+  document.addEventListener('keydown', repKey);
+  closeBtn.focus();
+}
+
 async function loadPublicReports() {
   try {
     const list = await api('/api/reports');
@@ -369,9 +412,8 @@ async function loadPublicReports() {
     reportsList = list;
     reportLayer.clearLayers();
     for (const r of list) {
-      L.circleMarker([r.lat, r.lon], { radius: 7, color: '#ddd6fe', fillColor: COLOR.rep, fillOpacity: 0.9, weight: 2 })
-        .bindPopup(el('div', {}, el('b', {}, 'Reporte ciudadano'), ` (${r.status})`, el('br'), r.description, el('br'),
-          el('small', {}, fmtDateTime(r.createdAt) + '. Sin verificar, salvo que figure como verificado.')))
+      L.marker([r.lat, r.lon], { icon: repIcon, zIndexOffset: 800, title: 'Reporte ciudadano' })
+        .on('click', () => openReport(r))
         .addTo(reportLayer);
     }
     if (!selected) renderOverview();
@@ -915,7 +957,10 @@ $('#repForm').addEventListener('submit', async (e) => {
     setStatus($('#pickCoords'), 'Ubicación sin marcar.');
     picked = null;
     if (pickMarker) { pickMap.removeLayer(pickMarker); pickMarker = null; }
-    loadPublicReports();
+    await loadPublicReports();
+    if (!reportsList.some((x) => String(x.id) === String(r.id))) {
+      setStatus($('#repMsg'), `Reporte enviado con el código ${r.id}, pero el servidor todavía no lo devuelve en el mapa.`, 'err');
+    }
   } catch (err) { setStatus($('#repMsg'), err.message, 'err'); }
   finally { btn.disabled = false; }
 });
