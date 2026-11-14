@@ -374,7 +374,7 @@ const dbwrap = (fn) => (req, res) => fn(req, res).catch((e) => {
 app.get('/api/reports', dbwrap(async (req, res) => {
   const list = await store.listPublic();
   res.json(list.map((r) => ({
-    id: r.id, lat: r.lat, lon: r.lon, createdAt: r.createdAt, status: r.status, description: r.description,
+    id: r.id, lat: r.lat, lon: r.lon, createdAt: r.createdAt, status: r.status, description: r.description, name: r.name,
   })));
 }));
 
