@@ -1008,12 +1008,18 @@ function renderAdminReport(r) {
     try { await adminApi('/api/admin/reports/' + r.id, { method: 'PATCH', body: JSON.stringify({ status: sel.value, note: note.value }) }); loadAdmin(); loadPublicReports(); }
     catch (e) { alert(e.message); }
   } }, 'Guardar');
+  // Solo se puede eliminar un reporte que ya está atendido o descartado
+  const del = (r.status === 'atendido' || r.status === 'descartado') ? el('button', { class: 'btn danger', type: 'button', onclick: async () => {
+    if (!confirm(`¿Eliminar el reporte ${r.id} de forma definitiva? No se puede deshacer.`)) return;
+    try { await adminApi('/api/admin/reports/' + r.id, { method: 'DELETE' }); loadAdmin(); loadPublicReports(); }
+    catch (e) { alert(e.message); }
+  } }, 'Eliminar') : null;
   const n = nearestStations(r.lat, r.lon, 1)[0];
   return el('div', { class: 'item ' + r.status },
     el('div', { class: 'top' }, el('b', {}, `Reporte ${r.id}`), el('span', { class: 'pill ' + r.status }, r.status), el('small', {}, fmtDateTime(r.createdAt))),
     el('div', {}, r.description),
     el('small', {}, `Ubicación ${r.lat}, ${r.lon}` + (r.name ? `. Nombre: ${r.name}` : '') + (r.contact ? `. Contacto: ${r.contact}` : '') + (n ? `. Cuartel más cercano: ${stationName(n.s)}, a ${fmtKm(n.km)} km.` : '')),
-    el('div', { class: 'controls' }, sel, note, save,
+    el('div', { class: 'controls' }, sel, note, save, del,
       el('button', { class: 'btn', onclick: () => { showTab('mapa'); map.setView([r.lat, r.lon], 13); } }, 'Ver en el mapa')),
     el('ul', { class: 'hist' }, r.history.map((h) => el('li', {}, `${fmtDateTime(h.at)}: ${h.status}${h.note ? '. ' + h.note : ''}`))));
 }
